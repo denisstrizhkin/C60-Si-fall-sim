@@ -253,13 +253,46 @@ def get_rim_info(group_ids, fu_x_coord, fu_y_coord):
     lmp.cmd("group g_rim id " + " ".join(group_ids.astype(int).astype(str)))
     lmp.cmd(f'variable r_rim atom "sqrt((x-{fu_x_coord})^2+(y-{fu_y_coord})^2)"')
     lmp.cmd('compute r_rim_sum g_rim reduce sum v_r_rim')
+    lmp.cmd('compute r_rim_max g_rim reduce max v_r_rim')
+    r_max = lmp.gscomp('r_rim_max')
     r_mean = lmp.gscomp('r_rim_sum') / len(group_ids)
     lmp.cmd('compute rim_z_sum g_rim reduce sum z')
     lmp.cmd('compute rim_z_max g_rim reduce max z')
     z_mean = lmp.gscomp('rim_z_sum') / len(group_ids)
     z_max = lmp.gscomp('rim_z_max')
+    lmp.cmd('variable rim_count equal "count(g_rim)"')
+    rim_count = lmp.evar('rim_count')
 
-    return f'<r>: {r_mean}\n<z>: {z_mean}\nz_max: {z_max}'
+    return np.array([[rim_count, r_mean, r_max, z_mean, z_max]])
+
+
+def get_crater_info(clusters):
+    crater_id = np.bincount(clusters.astype(int)).argmax()
+    lmp.cmd(f'variable is_crater atom "c_clusters=={crater_id}"')
+
+    lmp.cmd('compute crater_num g_vac reduce sum v_is_crater')
+    crater_count = lmp.gscomp('crater_num')
+    voronoi = lmp.aacomp('voro_vol')
+    cell_vol = np.median(voronoi, axis=0)[0]
+    crater_vol = cell_vol * crater_count
+
+    lmp.cmd('variable is_surface atom "z>-2.4*0.707"')
+    lmp.cmd('compute surface_count g_vac reduce sum v_is_surface')
+    surface_count = lmp.gscomp('surface_count')
+    cell_surface = 7.3712
+    surface_area = cell_surface * surface_count
+
+    lmp.cmd('compute crater_z_mean g_vac reduce sum z')
+    lmp.cmd('compute crater_z_min g_vac reduce min z')
+    crater_z_min = lmp.gscomp('crater_z_min')
+    crater_z_mean = lmp.gscomp('crater_z_mean') / crater_count
+    
+    return np.array([[crater_count,crater_vol,surface_area,crater_z_mean,crater_z_min]])
+
+
+def get_carbon_hist():
+    
+    return None
 
 
 def main():
@@ -312,13 +345,17 @@ def main():
     atom_cluster = lmp.avcomp('clusters')
     atom_x = lmp._lmp.numpy.extract_atom('x')
     atom_id = lmp._lmp.numpy.extract_atom('id')
+    atom_type = lmp._lmp.extract_atom('type')
     mask, cluster_ids = get_clusters_mask(atom_x, atom_cluster)
 
     lmp_sputtered_clusters(cluster_ids)
     clusters_table = get_clusters_table(atom_cluster[mask], cluster_ids)
     np.savetxt(f'{lmp.RESULTS_DIR}/clusters_table.txt', clusters_table, header='cluster_id N_Si N_C mass Px Py Pz Ek angle', delimiter='\t', fmt="%.5f")
     rim_info = get_rim_info(atom_id[~mask & (atom_cluster!=0)], fu_x_coord, fu_y_coord)
+    np.savetxt(f'{lmp.RESULTS_DIR}/rim_table.txt', rim_info, header='N r_mean r_max z_mean z_max', delimiter='\t', fmt="%.5f")
 
+    carbon_hist = get_carbon_hist(atom_x, atom_type)
+    
     lmp.close()
     lmp.start()
     lmp.cmd('read_restart restart.lammps')
@@ -332,21 +369,10 @@ def main():
 
     clusters = lmp.avcomp('clusters')
     clusters = clusters[clusters != 0]
-    crater_id = np.bincount(clusters.astype(int)).argmax()
-    lmp.cmd(f'variable is_crater atom "c_clusters=={crater_id}"')
-    lmp.cmd('compute crater_num g_vac reduce sum v_is_crater')
-    lmp.cmd('variable is_surface atom "z>-2.4*0.707"')
-    lmp.cmd('compute surface_count g_vac reduce sum v_is_surface')
-    crater_num = lmp.gscomp('crater_num')
-    voronoi = lmp.aacomp('voro_vol')
-    cell_vol = np.median(voronoi, axis=0)[0]
-    surface_count = lmp.gscomp('surface_count')
-    cell_surface = 7.3712
+    crater_info = get_crater_info(clusters)
+    np.savetxt(f'{lmp.RESULTS_DIR}/crater_table.txt', crater_info, header='N V S z_mean z_min', delimiter='\t', fmt="%.5f")
+    
     lmp.close()
-
-    print(f'crater volume: {cell_vol * crater_num}')
-    print(rim_info)
-    print(f'crater surface: {cell_surface * surface_count}, {surface_count}')
 
 
 if __name__ == '__main__':
