@@ -3,6 +3,7 @@
 import types
 import lammps
 import numpy as np
+from os import path
 
 
 class lmp:
@@ -48,7 +49,7 @@ class lmp:
     @staticmethod
     def run(steps):
         lmp.cmd(f'run {steps}')
-        
+
     @staticmethod
     def avcomp(comp_name):
         return lmp._lmp.numpy.extract_compute(
@@ -102,14 +103,21 @@ def lmp_regions(si_lattice, width, si_top, si_bottom, si_fixed):
     return f"""
 lattice diamond {si_lattice} orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
 
-region r_si_all     block {-width} {width} {-width} {width} {si_bottom} {si_top} units lattice
-region r_fixed      block {-width} {width} {-width} {width} {si_bottom} {si_fixed} units lattice
+region r_si_all     block {-width} {width} {-width} {width} {si_bottom} \
+{si_top} units lattice
+region r_fixed      block {-width} {width} {-width} {width} {si_bottom} \
+{si_fixed} units lattice
 
-region r_floor   block {-width}  {width}    {-width}  {width}    {si_fixed} {si_fixed+1}
-region r_x_left  block {-width}  {-width+1} {-width}  {width}    {si_fixed} {si_top}
-region r_x_right block {width-1} {width}    {-width}  {width}    {si_fixed} {si_top}
-region r_y_left  block {-width}  {width}    {-width}  {-width+1} {si_fixed} {si_top}
-region r_y_right block {-width}  {width}    {width-1} {width}    {si_fixed} {si_top}
+region r_floor   block {-width}  {width}    {-width}  {width}    {si_fixed} \
+{si_fixed+1}
+region r_x_left  block {-width}  {-width+1} {-width}  {width}    {si_fixed} \
+{si_top}
+region r_x_right block {width-1} {width}    {-width}  {width}    {si_fixed} \
+{si_top}
+region r_y_left  block {-width}  {width}    {-width}  {-width+1} {si_fixed} \
+{si_top}
+region r_y_right block {-width}  {width}    {width-1} {width}    {si_fixed} \
+{si_top}
 
 region r_bath union 5 r_floor r_x_right r_x_left r_y_right r_y_left
 
@@ -121,7 +129,8 @@ region r_clusters block {-width} {width} {-width} {width} 0 INF units lattice
 def lmp_add_fu(fu_x_coord, fu_y_coord, fu_z_coord):
     return f"""
 molecule m_C60 ./mol.txt
-create_atoms 1 single {fu_x_coord} {fu_y_coord} {fu_z_coord} mol m_C60 1 units box
+create_atoms 1 single {fu_x_coord} {fu_y_coord} {fu_z_coord} \
+mol m_C60 1 units box
 """
 
 
@@ -174,7 +183,8 @@ def lmp_thermo():
 reset_timestep 0
 timestep       0.001
 thermo         10
-thermo_style   custom step pe ke etotal temp c_vacancies dt time c_sputter_all c_sputter_c c_sputter_si
+thermo_style   custom step pe ke etotal temp c_vacancies dt time \
+c_sputter_all c_sputter_c c_sputter_si
 """
 
 
@@ -182,7 +192,7 @@ thermo_style   custom step pe ke etotal temp c_vacancies dt time c_sputter_all c
 def lmp_fixes(temperature):
     return f"""
 fix f_1 g_nve nve/omp
-fix f_2 g_thermostat temp/berendsen {temperature} {temperature} 0.001 
+fix f_2 g_thermostat temp/berendsen {temperature} {temperature} 0.001
 fix f_3 all electron/stopping 10.0 ./elstop-table.txt region r_si_all
 fix f_4 all dt/reset 1 0.0005 0.001 0.1
 """
@@ -197,8 +207,10 @@ group g_clusters variable is_sputtered
 compute clusters g_clusters cluster/atom 3
 compute mass g_clusters property/atom mass
 
-dump d_clusters g_clusters custom 20 {lmp.RESULTS_DIR}/clusters.dump id x y z vx vy vz type c_clusters c_atom_ke
-dump d_all all custom 20 {lmp.RESULTS_DIR}/all.dump id x y z vx vy vz type c_clusters c_atom_ke
+dump d_clusters g_clusters custom 20 {lmp.RESULTS_DIR}/clusters.dump \
+id x y z vx vy vz type c_clusters c_atom_ke
+dump d_all all custom 20 {lmp.RESULTS_DIR}/all.dump \
+id x y z vx vy vz type c_clusters c_atom_ke
 """
 
 
@@ -215,8 +227,10 @@ def lmp_sputtered_clusters(clusters):
         smom = f'{cluster_id}_mom'
         commands += f'compute {smom} {group} momentum\n'
         commands += f'compute {cluster_id}_mass {group} reduce sum c_mass\n'
-        commands += f'variable {cluster_id}_ek equal "(c_{smom}[1]^2+c_{smom}[2]^2+c_{smom}[3]^2)/(2*c_{cluster_id}_mass)"\n'
-        commands += f'variable {cluster_id}_angle equal "atan(c_{smom}[3]/sqrt(c_{smom}[1]^2+c_{smom}[2]^2))"\n'
+        commands += f'variable {cluster_id}_ek equal "(c_{smom}[1]^2+\
+c_{smom}[2]^2+c_{smom}[3]^2)/(2*c_{cluster_id}_mass)"\n'
+        commands += f'variable {cluster_id}_angle equal "atan(c_{smom}[3]/\
+sqrt(c_{smom}[1]^2+c_{smom}[2]^2))"\n'
     return commands
 
 
@@ -230,18 +244,19 @@ def get_clusters_table(clusters, cluster_ids):
         var_ek = lmp.evar(f'{cluster_id}_ek')
         var_angle = lmp.evar(f'{cluster_id}_angle')
         table = np.concatenate(
-            (table, np.array([cluster_id, comp_si, comp_c, comp_mass, *comp_mom,
+            (table, np.array([lmp.sim_num, comp_si, comp_c, comp_mass,
+                              *comp_mom,
                               2*5.1875*1e-5*var_ek, 90-var_angle*180/np.pi]))
         )
-    table = table.reshape((table.shape[0]//9,9))
+    table = table.reshape((table.shape[0]//9, 9))
     return table
 
 
-def get_clusters_mask(atom_x, atom_cluster):
+def get_clusters_mask(atom_x, atom_cluster, si_top):
     mask_1 = (atom_cluster != 0)
     cluster_ids = set(np.unique(atom_cluster[mask_1]).flatten())
 
-    mask_2 = (atom_x[:,2] < 2.0)
+    mask_2 = (atom_x[:, 2] < (si_top + 2.0))
     no_cluster_ids = set(np.unique(atom_cluster[mask_2]).flatten())
     cluster_ids = list(cluster_ids.difference(no_cluster_ids))
 
@@ -251,7 +266,8 @@ def get_clusters_mask(atom_x, atom_cluster):
 
 def get_rim_info(group_ids, fu_x_coord, fu_y_coord):
     lmp.cmd("group g_rim id " + " ".join(group_ids.astype(int).astype(str)))
-    lmp.cmd(f'variable r_rim atom "sqrt((x-{fu_x_coord})^2+(y-{fu_y_coord})^2)"')
+    lmp.cmd(f'variable r_rim atom "sqrt((x-{fu_x_coord})^2+\
+(y-{fu_y_coord})^2)"')
     lmp.cmd('compute r_rim_sum g_rim reduce sum v_r_rim')
     lmp.cmd('compute r_rim_max g_rim reduce max v_r_rim')
     r_max = lmp.gscomp('r_rim_max')
@@ -263,7 +279,7 @@ def get_rim_info(group_ids, fu_x_coord, fu_y_coord):
     lmp.cmd('variable rim_count equal "count(g_rim)"')
     rim_count = lmp.evar('rim_count')
 
-    return np.array([[rim_count, r_mean, r_max, z_mean, z_max]])
+    return np.array([[lmp.sim_num, rim_count, r_mean, r_max, z_mean, z_max]])
 
 
 def get_crater_info(clusters):
@@ -286,39 +302,63 @@ def get_crater_info(clusters):
     lmp.cmd('compute crater_z_min g_vac reduce min z')
     crater_z_min = lmp.gscomp('crater_z_min')
     crater_z_mean = lmp.gscomp('crater_z_mean') / crater_count
-    
-    return np.array([[crater_count,crater_vol,surface_area,crater_z_mean,crater_z_min]])
+
+    return np.array([[lmp.sim_num, crater_count, crater_vol, surface_area,
+                      crater_z_mean, crater_z_min]])
 
 
-def get_carbon_hist():
-    
-    return None
+def get_carbon_hist(atom_x, atom_type, mask):
+    mask = (atom_type == 2) & ~mask
+    z_coords = np.around(atom_x[mask][:, 2], 1)
+    right = int(np.ceil(z_coords.max()))
+    left = int(np.floor(z_coords.min()))
+    hist, bins = np.histogram(z_coords, bins=(right-left), range=(left, right))
+    length = len(hist)
+    hist = np.concatenate(((bins[1:]-0.5).reshape(length, 1),
+                           hist.reshape(length, 1)), axis=1)
+
+    return hist
 
 
-def main():
-    lmp.RESULTS_DIR = './results'
-    
+def get_carbon_info(group_ids, fu_x_coord, fu_y_coord):
+    lmp.cmd("group g_carbon id " + " ".join(group_ids.astype(int).astype(str)))
+    lmp.cmd(f'variable r_carbon atom "sqrt((x-{fu_x_coord})^2+\
+(y-{fu_y_coord})^2)"')
+    lmp.cmd('compute r_carbon_sum g_carbon reduce sum v_r_carbon')
+    lmp.cmd('compute r_carbon_max g_carbon reduce max v_r_carbon')
+    r_max = lmp.gscomp('r_carbon_max')
+    r_mean = lmp.gscomp('r_carbon_sum') / len(group_ids)
+    lmp.cmd('variable carbon_count equal "count(g_carbon)"')
+    count = lmp.evar('carbon_count')
+
+    return np.array([[lmp.sim_num, count, r_mean, r_max]])
+
+
+def append_table(filename, table, header=''):
+    with open(filename, 'ab') as file:
+        np.savetxt(file, table, delimiter='\t', fmt='%.5f', header=header)
+
+
+def main(fu_x_coord, fu_y_coord, fu_z_vel):
     lmp.start()
 
     fu_z_coord = 15
-    fu_x_coord = 0
-    fu_y_coord = 0
-
-    fu_z_vel = 462.8
 
     si_lattice = 5.43
-    si_bottom = -20
+    si_bottom = -16
     si_fixed = si_bottom + 0.5
-    si_top = 0
+    si_top = 15.3
 
     temperature = 1e-6
 
-    width = 20
+    width = 12
 
-    z_coord_threshold = 0.4
+    z_coord_threshold = 83.19
+
+    fu_z_coord += si_top * 5.43
 
     lmp_init()
-    lmp.cmd('read_data input.data')
+    lmp.cmd('read_data ./input_files/fall.input.data')
 
     lmp_regions(si_lattice, width, si_top, si_bottom, si_fixed)
     lmp.cmd('write_restart restart.lammps')
@@ -331,31 +371,38 @@ def main():
     lmp_thermo()
     lmp_fixes(temperature)
 
-    lmp.cmd(f'dump d_1 all custom 20 {lmp.RESULTS_DIR}/norm.dump id type xs ys zs')
+    lmp.cmd(f'# dump d_1 all custom 20 {lmp.RESULTS_DIR}/norm.dump \
+id type xs ys zs')
     lmp.cmd(f'velocity g_fu set NULL NULL {-fu_z_vel} sum yes units box')
-    lmp.run(100)
+    lmp.run(5000)
 
     lmp_clusters()
     lmp.cmd('run 1')
 
     vac_ids = lmp.avar('vacancy_id', 'g_si_all')
     vac_ids = vac_ids[vac_ids != 0]
-    vac_group_command = "group g_vac id " + " ".join(vac_ids.astype(int).astype(str))
+    vac_group_command = "group g_vac id " + " ".join(vac_ids.astype(int)
+                                                     .astype(str))
 
     atom_cluster = lmp.avcomp('clusters')
     atom_x = lmp._lmp.numpy.extract_atom('x')
     atom_id = lmp._lmp.numpy.extract_atom('id')
-    atom_type = lmp._lmp.extract_atom('type')
-    mask, cluster_ids = get_clusters_mask(atom_x, atom_cluster)
+    atom_type = lmp._lmp.numpy.extract_atom('type')
+    mask, cluster_ids = get_clusters_mask(atom_x, atom_cluster, si_top * 5.43)
 
     lmp_sputtered_clusters(cluster_ids)
     clusters_table = get_clusters_table(atom_cluster[mask], cluster_ids)
-    np.savetxt(f'{lmp.RESULTS_DIR}/clusters_table.txt', clusters_table, header='cluster_id N_Si N_C mass Px Py Pz Ek angle', delimiter='\t', fmt="%.5f")
-    rim_info = get_rim_info(atom_id[~mask & (atom_cluster!=0)], fu_x_coord, fu_y_coord)
-    np.savetxt(f'{lmp.RESULTS_DIR}/rim_table.txt', rim_info, header='N r_mean r_max z_mean z_max', delimiter='\t', fmt="%.5f")
+    append_table(lmp.CLUSTERS_TABLE, clusters_table)
+    rim_info = get_rim_info(atom_id[~mask & (atom_cluster != 0)],
+                            fu_x_coord, fu_y_coord)
+    append_table(lmp.RIM_TABLE, rim_info)
 
-    carbon_hist = get_carbon_hist(atom_x, atom_type)
-    
+    carbon_hist = get_carbon_hist(atom_x, atom_type, mask)
+    append_table(lmp.CARBON_DIST, carbon_hist, header=str(lmp.sim_num))
+    carbon_info = get_carbon_info(atom_id[~mask & (atom_type == 2)],
+                                  fu_x_coord, fu_y_coord)
+    append_table(lmp.CARBON_TABLE, carbon_info)
+
     lmp.close()
     lmp.start()
     lmp.cmd('read_restart restart.lammps')
@@ -364,16 +411,42 @@ def main():
     lmp.cmd('group g_si_all type 1')
     lmp.cmd('compute voro_vol g_si_all voronoi/atom only_group')
     lmp.cmd('compute clusters g_vac cluster/atom 3')
-    lmp.cmd(f'dump d_clusters g_vac custom 20 {lmp.RESULTS_DIR}/crater.dump id x y z vx vy vz type c_clusters')
+    lmp.cmd(f'dump d_clusters g_vac custom 20 {lmp.RESULTS_DIR}/crater.dump \
+id x y z vx vy vz type c_clusters')
     lmp.cmd('run 1')
 
     clusters = lmp.avcomp('clusters')
     clusters = clusters[clusters != 0]
     crater_info = get_crater_info(clusters)
-    np.savetxt(f'{lmp.RESULTS_DIR}/crater_table.txt', crater_info, header='N V S z_mean z_min', delimiter='\t', fmt="%.5f")
-    
+    append_table(lmp.CRATER_TABLE, crater_info)
+
     lmp.close()
 
 
 if __name__ == '__main__':
-    main()
+    lmp.RESULTS_DIR = './results'
+    lmp.CLUSTERS_TABLE = path.join(lmp.RESULTS_DIR, 'clusters_table.txt')
+    lmp.RIM_TABLE = path.join(lmp.RESULTS_DIR, 'rim_table.txt')
+    lmp.CARBON_TABLE = path.join(lmp.RESULTS_DIR, 'carbon_table.txt')
+    lmp.CRATER_TABLE = path.join(lmp.RESULTS_DIR, 'crater_table.txt')
+    lmp.CARBON_DIST = path.join(lmp.RESULTS_DIR, 'carbon_dist.txt')
+
+    def write_header(header_str, table):
+        with open(table, 'w', encoding='utf-8') as file:
+            file.write('# ' + header_str + '\n')
+
+    write_header('sim_num N_Si N_C mass Px Py Pz Ek angle', lmp.CLUSTERS_TABLE)
+    write_header('sim_num N r_mean r_max z_mean z_max', lmp.RIM_TABLE)
+    write_header('sim_num N r_mean r_max', lmp.CARBON_TABLE)
+    write_header('sim_num N V S z_mean z_min', lmp.CRATER_TABLE)
+    write_header('z count', lmp.CARBON_DIST)
+
+    def rand_coord():
+        return 5.43 * (np.random.rand() * 2 - 1)
+
+    for i in range(5):
+        lmp.sim_num = i+1
+
+        x = rand_coord()
+        y = rand_coord()
+        main(x, y, 462.8)
