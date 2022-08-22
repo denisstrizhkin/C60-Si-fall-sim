@@ -158,7 +158,7 @@ group   g_thermostat dynamic g_si_all region r_bath
 
 
 @lmp.scmd
-def lmp_computes(z_coord_threshold):
+def lmp_computes():
     return f"""
 # compute ke per atom
 compute atom_ke all ke/atom
@@ -170,7 +170,7 @@ variable  vacancy_id atom "v_is_vacancy*id"
 compute   vacancies g_si_all reduce sum v_is_vacancy
 
 # sputtered atoms
-variable is_sputtered atom "z>{z_coord_threshold}"
+variable is_sputtered atom "z>{lmp.zero_lvl}"
 compute   sputter_all  all       reduce sum v_is_sputtered
 compute   sputter_si   g_si_all  reduce sum v_is_sputtered
 compute   sputter_c    g_fu      reduce sum v_is_sputtered
@@ -252,11 +252,11 @@ def get_clusters_table(clusters, cluster_ids):
     return table
 
 
-def get_clusters_mask(atom_x, atom_cluster, si_top):
+def get_clusters_mask(atom_x, atom_cluster):
     mask_1 = (atom_cluster != 0)
     cluster_ids = set(np.unique(atom_cluster[mask_1]).flatten())
 
-    mask_2 = (atom_x[:, 2] < (si_top + 2.0))
+    mask_2 = (atom_x[:, 2] < (lmp.zero_lvl + 2.0))
     no_cluster_ids = set(np.unique(atom_cluster[mask_2]).flatten())
     cluster_ids = list(cluster_ids.difference(no_cluster_ids))
 
@@ -279,12 +279,15 @@ def get_rim_info(group_ids, fu_x_coord, fu_y_coord):
     lmp.cmd('variable rim_count equal "count(g_rim)"')
     rim_count = lmp.evar('rim_count')
 
-    return np.array([[lmp.sim_num, rim_count, r_mean, r_max, z_mean, z_max]])
+    return np.array([[lmp.sim_num, rim_count, r_mean,
+                      r_max, z_mean - lmp.zero_lvl, z_max - lmp.zero_lvl]])
 
 
 def get_crater_info(clusters):
     crater_id = np.bincount(clusters.astype(int)).argmax()
     lmp.cmd(f'variable is_crater atom "c_clusters=={crater_id}"')
+    lmp.cmd('group g_vac clear')
+    lmp.cmd('group g_vac variable is_crater')
 
     lmp.cmd('compute crater_num g_vac reduce sum v_is_crater')
     crater_count = lmp.gscomp('crater_num')
@@ -292,7 +295,7 @@ def get_crater_info(clusters):
     cell_vol = np.median(voronoi, axis=0)[0]
     crater_vol = cell_vol * crater_count
 
-    lmp.cmd('variable is_surface atom "z>-2.4*0.707"')
+    lmp.cmd(f'variable is_surface atom "z>-2.4*0.707+{lmp.zero_lvl}"')
     lmp.cmd('compute surface_count g_vac reduce sum v_is_surface')
     surface_count = lmp.gscomp('surface_count')
     cell_surface = 7.3712
@@ -300,8 +303,8 @@ def get_crater_info(clusters):
 
     lmp.cmd('compute crater_z_mean g_vac reduce sum z')
     lmp.cmd('compute crater_z_min g_vac reduce min z')
-    crater_z_min = lmp.gscomp('crater_z_min')
-    crater_z_mean = lmp.gscomp('crater_z_mean') / crater_count
+    crater_z_min = lmp.gscomp('crater_z_min') - lmp.zero_lvl
+    crater_z_mean = lmp.gscomp('crater_z_mean') / crater_count - lmp.zero_lvl
 
     return np.array([[lmp.sim_num, crater_count, crater_vol, surface_area,
                       crater_z_mean, crater_z_min]])
@@ -309,10 +312,11 @@ def get_crater_info(clusters):
 
 def get_carbon_hist(atom_x, atom_type, mask):
     mask = (atom_type == 2) & ~mask
-    z_coords = np.around(atom_x[mask][:, 2], 1)
+    z_coords = np.around(atom_x[mask][:, 2]-lmp.zero_lvl, 1)
     right = int(np.ceil(z_coords.max()))
     left = int(np.floor(z_coords.min()))
-    hist, bins = np.histogram(z_coords, bins=(right-left), range=(left, right))
+    hist, bins = np.histogram(z_coords,
+                              bins=(right-left), range=(left, right))
     length = len(hist)
     hist = np.concatenate(((bins[1:]-0.5).reshape(length, 1),
                            hist.reshape(length, 1)), axis=1)
@@ -353,7 +357,7 @@ def main(fu_x_coord, fu_y_coord, fu_z_vel):
 
     width = 12
 
-    z_coord_threshold = 83.19
+    lmp.zero_lvl = 83.19
 
     fu_z_coord += si_top * 5.43
 
@@ -367,7 +371,7 @@ def main(fu_x_coord, fu_y_coord, fu_z_vel):
     lmp_potentials()
     lmp_groups()
 
-    lmp_computes(z_coord_threshold)
+    lmp_computes()
     lmp_thermo()
     lmp_fixes(temperature)
 
@@ -388,7 +392,7 @@ id type xs ys zs')
     atom_x = lmp._lmp.numpy.extract_atom('x')
     atom_id = lmp._lmp.numpy.extract_atom('id')
     atom_type = lmp._lmp.numpy.extract_atom('type')
-    mask, cluster_ids = get_clusters_mask(atom_x, atom_cluster, si_top * 5.43)
+    mask, cluster_ids = get_clusters_mask(atom_x, atom_cluster)
 
     lmp_sputtered_clusters(cluster_ids)
     clusters_table = get_clusters_table(atom_cluster[mask], cluster_ids)
@@ -444,7 +448,7 @@ if __name__ == '__main__':
     def rand_coord():
         return 5.43 * (np.random.rand() * 2 - 1)
 
-    for i in range(5):
+    for i in range(1):
         lmp.sim_num = i+1
 
         x = rand_coord()
