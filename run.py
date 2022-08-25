@@ -357,12 +357,13 @@ def main(fu_x_coord, fu_y_coord, fu_z_vel):
 
     width = 12
 
-    lmp.zero_lvl = 83.19
+    # lmp.zero_lvl = 83.19 # 0K
+    lmp.zero_lvl = 83.391  # 700K
 
     fu_z_coord += si_top * 5.43
 
     lmp_init()
-    lmp.cmd('read_data ./input_files/fall.input.data')
+    lmp.cmd('read_data ./input_files/fall700.input.data')
 
     lmp_regions(si_lattice, width, si_top, si_bottom, si_fixed)
     lmp.cmd('write_restart restart.lammps')
