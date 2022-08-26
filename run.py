@@ -1,9 +1,8 @@
 #!/bin/python3
 
-import types
+from os import path
 import lammps
 import numpy as np
-from os import path
 
 
 class lmp:
@@ -11,35 +10,20 @@ class lmp:
 
     @staticmethod
     def cmd(command):
-        if isinstance(command, str):
-            lmp._lmp.command(command)
-        elif isinstance(command, types.FunctionType):
-            def wrapper(*args, **kwargs) -> None:
-                lmp._lmp.command(command(*args, **kwargs))
-            return wrapper
+        lmp._lmp.command(command)
 
     @staticmethod
     def scmd(command):
-        if isinstance(command, str):
-            lmp._lmp.commands_string(command)
-        elif isinstance(command, types.FunctionType):
-            def wrapper(*args, **kwargs) -> None:
-                lmp._lmp.commands_string(command(*args, **kwargs))
-            return wrapper
+        lmp._lmp.commands_string(command)
 
     @staticmethod
     def lcmd(command):
-        if isinstance(command, str):
-            lmp._lmp.commands_list(command)
-        elif isinstance(command, types.FunctionType):
-            def wrapper(*args, **kwargs) -> None:
-                lmp._lmp.commands_list(command(*args, **kwargs))
-            return wrapper
+        lmp._lmp.commands_list(command)
 
     @staticmethod
-    def start() -> None:
+    def start(num_of_threads) -> None:
         lmp._lmp = lammps.lammps()
-        lmp._lmp.command('package omp 12')
+        lmp._lmp.command(f'package omp {num_of_threads}')
 
     @staticmethod
     def close() -> None:
@@ -87,20 +71,18 @@ class lmp:
         )
 
 
-@lmp.scmd
 def lmp_init():
-    return """
+    lmp.scmd("""
 units      metal
 dimension  3
 boundary   p p m
 atom_style atomic
 atom_modify map yes
-"""
+""")
 
 
-@lmp.scmd
 def lmp_regions(si_lattice, width, si_top, si_bottom, si_fixed):
-    return f"""
+    lmp.scmd(f"""
 lattice diamond {si_lattice} orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
 
 region r_si_all     block {-width} {width} {-width} {width} {si_bottom} \
@@ -122,44 +104,40 @@ region r_y_right block {-width}  {width}    {width-1} {width}    {si_fixed} \
 region r_bath union 5 r_floor r_x_right r_x_left r_y_right r_y_left
 
 region r_clusters block {-width} {width} {-width} {width} 0 INF units lattice
-"""
+""")
 
 
-@lmp.scmd
 def lmp_add_fu(fu_x_coord, fu_y_coord, fu_z_coord):
-    return f"""
+    lmp.scmd(f"""
 molecule m_C60 ./mol.txt
 create_atoms 1 single {fu_x_coord} {fu_y_coord} {fu_z_coord} \
 mol m_C60 1 units box
-"""
+""")
 
 
-@lmp.scmd
 def lmp_potentials():
-    return """
+    lmp.scmd("""
 pair_style  hybrid airebo/omp 3.0 tersoff/zbl/omp
 pair_coeff  * * tersoff/zbl/omp SiC.tersoff.zbl Si C
 pair_coeff  2 2 none
 pair_coeff  * * airebo/omp CH.airebo NULL C
 neighbor    3.0 bin
-"""
+""")
 
 
-@lmp.scmd
 def lmp_groups():
-    return """
+    lmp.scmd("""
 group   g_fu     type 2
 group   g_si_all type 1
 group   g_fixed region r_fixed
 group   g_nve subtract all g_fixed
 
 group   g_thermostat dynamic g_si_all region r_bath
-"""
+""")
 
 
-@lmp.scmd
 def lmp_computes():
-    return f"""
+    lmp.scmd(f"""
 # compute ke per atom
 compute atom_ke all ke/atom
 
@@ -174,69 +152,60 @@ variable is_sputtered atom "z>{lmp.zero_lvl}"
 compute   sputter_all  all       reduce sum v_is_sputtered
 compute   sputter_si   g_si_all  reduce sum v_is_sputtered
 compute   sputter_c    g_fu      reduce sum v_is_sputtered
-"""
+""")
 
 
-@lmp.scmd
 def lmp_thermo():
-    return """
+    lmp.scmd("""
 reset_timestep 0
 timestep       0.001
 thermo         10
 thermo_style   custom step pe ke etotal temp c_vacancies dt time \
 c_sputter_all c_sputter_c c_sputter_si
-"""
+""")
 
 
-@lmp.scmd
 def lmp_fixes(temperature):
-    return f"""
+    lmp.scmd(f"""
 fix f_1 g_nve nve/omp
 fix f_2 g_thermostat temp/berendsen {temperature} {temperature} 0.001
 fix f_3 all electron/stopping 10.0 ./elstop-table.txt region r_si_all
 fix f_4 all dt/reset 1 0.0005 0.001 0.1
-"""
+""")
 
 
-@lmp.scmd
 def lmp_clusters():
-    return f"""
+    lmp.scmd(f"""
 #group g_clusters_parent region r_clusters
 #group g_clusters dynamic g_clusters_parent var is_sputtered
 group g_clusters variable is_sputtered
 compute clusters g_clusters cluster/atom 3
 compute mass g_clusters property/atom mass
 
-dump d_clusters g_clusters custom 20 {lmp.RESULTS_DIR}/clusters.dump \
+dump d_clusters g_clusters custom 20 {lmp.RESULTS_DIR}/\
+clusters_{lmp.sim_num}.dump id x y z vx vy vz type c_clusters c_atom_ke
+dump d_all all custom 20 {lmp.RESULTS_DIR}/all_{lmp.sim_num}.dump \
 id x y z vx vy vz type c_clusters c_atom_ke
-dump d_all all custom 20 {lmp.RESULTS_DIR}/all.dump \
-id x y z vx vy vz type c_clusters c_atom_ke
-"""
+""")
 
 
-@lmp.scmd
-def lmp_sputtered_clusters(clusters):
-    commands = ''
-    for cluster_id in clusters:
-        var = f'is_cluster_{cluster_id}'
-        group = f'g_cluster_{cluster_id}'
-        commands += f'variable {var} atom "c_clusters=={cluster_id}"\n'
-        commands += f'group {group} variable {var}\n'
-        commands += f'compute {cluster_id}_c g_fu reduce sum v_{var}\n'
-        commands += f'compute {cluster_id}_si g_si_all reduce sum v_{var}\n'
-        smom = f'{cluster_id}_mom'
-        commands += f'compute {smom} {group} momentum\n'
-        commands += f'compute {cluster_id}_mass {group} reduce sum c_mass\n'
-        commands += f'variable {cluster_id}_ek equal "(c_{smom}[1]^2+\
-c_{smom}[2]^2+c_{smom}[3]^2)/(2*c_{cluster_id}_mass)"\n'
-        commands += f'variable {cluster_id}_angle equal "atan(c_{smom}[3]/\
-sqrt(c_{smom}[1]^2+c_{smom}[2]^2))"\n'
-    return commands
-
-
-def get_clusters_table(clusters, cluster_ids):
+def get_clusters_table(cluster_ids):
     table = np.array([])
     for cluster_id in cluster_ids:
+        var = f'is_cluster_{cluster_id}'
+        group = f'g_cluster_{cluster_id}'
+        lmp.cmd(f'variable {var} atom "c_clusters=={cluster_id}"')
+        lmp.cmd(f'group {group} variable {var}')
+        lmp.cmd(f'compute {cluster_id}_c g_fu reduce sum v_{var}')
+        lmp.cmd(f'compute {cluster_id}_si g_si_all reduce sum v_{var}')
+        smom = f'{cluster_id}_mom'
+        lmp.cmd(f'compute {smom} {group} momentum')
+        lmp.cmd(f'compute {cluster_id}_mass {group} reduce sum c_mass')
+        lmp.cmd(f'variable {cluster_id}_ek equal "(c_{smom}[1]^2+\
+c_{smom}[2]^2+c_{smom}[3]^2)/(2*c_{cluster_id}_mass)"')
+        lmp.cmd(f'variable {cluster_id}_angle equal "atan(c_{smom}[3]/\
+sqrt(c_{smom}[1]^2+c_{smom}[2]^2))"')
+
         comp_c = lmp.gscomp(f'{cluster_id}_c')
         comp_si = lmp.gscomp(f'{cluster_id}_si')
         comp_mom = lmp.gvcomp(f'{cluster_id}_mom')
@@ -248,6 +217,13 @@ def get_clusters_table(clusters, cluster_ids):
                               *comp_mom,
                               2*5.1875*1e-5*var_ek, 90-var_angle*180/np.pi]))
         )
+
+        lmp.cmd(f'uncompute {cluster_id}_c')
+        lmp.cmd(f'uncompute {cluster_id}_si')
+        lmp.cmd(f'uncompute {cluster_id}_mass')
+        lmp.cmd(f'uncompute {smom}')
+        lmp.cmd(f'group {group} delete')
+
     table = table.reshape((table.shape[0]//9, 9))
     return table
 
@@ -344,7 +320,7 @@ def append_table(filename, table, header=''):
 
 
 def main(fu_x_coord, fu_y_coord, fu_z_vel):
-    lmp.start()
+    lmp.start(12)
 
     fu_z_coord = 15
 
@@ -379,7 +355,7 @@ def main(fu_x_coord, fu_y_coord, fu_z_vel):
     lmp.cmd(f'# dump d_1 all custom 20 {lmp.RESULTS_DIR}/norm.dump \
 id type xs ys zs')
     lmp.cmd(f'velocity g_fu set NULL NULL {-fu_z_vel} sum yes units box')
-    lmp.run(5000)
+    lmp.run(100)
 
     lmp_clusters()
     lmp.cmd('run 1')
@@ -395,8 +371,7 @@ id type xs ys zs')
     atom_type = lmp._lmp.numpy.extract_atom('type')
     mask, cluster_ids = get_clusters_mask(atom_x, atom_cluster)
 
-    lmp_sputtered_clusters(cluster_ids)
-    clusters_table = get_clusters_table(atom_cluster[mask], cluster_ids)
+    clusters_table = get_clusters_table(cluster_ids)
     append_table(lmp.CLUSTERS_TABLE, clusters_table)
     rim_info = get_rim_info(atom_id[~mask & (atom_cluster != 0)],
                             fu_x_coord, fu_y_coord)
@@ -409,14 +384,14 @@ id type xs ys zs')
     append_table(lmp.CARBON_TABLE, carbon_info)
 
     lmp.close()
-    lmp.start()
+    lmp.start(12)
     lmp.cmd('read_restart restart.lammps')
     lmp_potentials()
     lmp.cmd(vac_group_command)
     lmp.cmd('group g_si_all type 1')
     lmp.cmd('compute voro_vol g_si_all voronoi/atom only_group')
     lmp.cmd('compute clusters g_vac cluster/atom 3')
-    lmp.cmd(f'dump d_clusters g_vac custom 20 {lmp.RESULTS_DIR}/crater.dump \
+    lmp.cmd(f'dump d_clusters g_vac custom 20 {lmp.RESULTS_DIR}/crater_{lmp.sim_num}.dump \
 id x y z vx vy vz type c_clusters')
     lmp.cmd('run 1')
 
@@ -454,4 +429,12 @@ if __name__ == '__main__':
 
         x = rand_coord()
         y = rand_coord()
-        main(x, y, 462.8)
+
+        try:
+            main(x, y, 462.8)
+        except lammps.MPIAbortException:
+            pass
+        except Exception:
+            pass
+
+    print('*** FINISHED COMPLETELY ***')
