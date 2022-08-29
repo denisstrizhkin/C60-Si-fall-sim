@@ -104,6 +104,9 @@ region r_y_right block {-width}  {width}    {width-1} {width}    {si_fixed} \
 region r_bath union 5 r_floor r_x_right r_x_left r_y_right r_y_left
 
 region r_clusters block {-width} {width} {-width} {width} 0 INF units lattice
+
+region not_outside block {-width + 2} {width - 2} {-width + 2} \
+    {width - 2} {si_bottom} {si_top+2} units lattice
 """)
 
 
@@ -133,6 +136,9 @@ group   g_fixed region r_fixed
 group   g_nve subtract all g_fixed
 
 group   g_thermostat dynamic g_si_all region r_bath
+
+group   not_outside region not_outside
+group   outside subtract g_si_all not_outside
 """)
 
 
@@ -176,8 +182,9 @@ fix f_4 all dt/reset 1 0.0005 0.001 0.1
 
 def lmp_clusters():
     lmp.scmd(f"""
-#group g_clusters_parent region r_clusters
-#group g_clusters dynamic g_clusters_parent var is_sputtered
+variable is_sputtered delete
+variable is_sputtered atom "z>{lmp.zero_lvl}"
+
 group g_clusters variable is_sputtered
 compute clusters g_clusters cluster/atom 3
 compute mass g_clusters property/atom mass
@@ -319,6 +326,21 @@ def append_table(filename, table, header=''):
         np.savetxt(file, table, delimiter='\t', fmt='%.5f', header=header)
 
 
+def lmp_recalc_zero_lvl(width,lattice):
+    lmp.cmd('compute max_outside_z outside reduce max z')
+    max_outside_z = lmp.gscomp('max_outside_z')
+
+    lmp.cmd(f'region surface block {-width} {width} {-width} {width} \
+{(max_outside_z - 1.35)/lattice} {max_outside_z/lattice} units lattice')
+    lmp.cmd('group surface region surface')
+    lmp.cmd('group outside_surface intersect surface outside')
+
+    lmp.cmd('compute ave_outside_z outside_surface reduce ave z')
+    ave_outside_z = lmp.gscomp('ave_outside_z')
+    delta = max_outside_z - ave_outside_z
+    lmp.zero_lvl = ave_outside_z + delta * 2;
+
+
 def main(fu_x_coord, fu_y_coord, fu_z_vel):
     lmp.start(12)
 
@@ -352,11 +374,12 @@ def main(fu_x_coord, fu_y_coord, fu_z_vel):
     lmp_thermo()
     lmp_fixes(temperature)
 
-    lmp.cmd(f'# dump d_1 all custom 20 {lmp.RESULTS_DIR}/norm.dump \
+    lmp.cmd(f'dump d_1 all custom 20 {lmp.RESULTS_DIR}/norm_{lmp.sim_num}.dump \
 id type xs ys zs')
     lmp.cmd(f'velocity g_fu set NULL NULL {-fu_z_vel} sum yes units box')
-    lmp.run(100)
+    lmp.run(10000)
 
+    lmp_recalc_zero_lvl(width,si_lattice)
     lmp_clusters()
     lmp.cmd('run 1')
 
@@ -431,10 +454,11 @@ if __name__ == '__main__':
         y = rand_coord()
 
         try:
-            main(x, y, 462.8)
+            main(x, y, 633.72)
         except lammps.MPIAbortException:
             pass
-        except Exception:
+        except Exception as e:
+            print(e)
             pass
 
     print('*** FINISHED COMPLETELY ***')
