@@ -5,148 +5,237 @@ import lammps
 import numpy as np
 
 
-class LAMMPS:
-    def __init__(self):
-        self._lmp = None
-
-    def cmd(self, command):
-        self._lmp.command(command)
-
-    def scmd(self, commands_string):
-        self._lmp.commands_string(commands_string)
-
-    def lcmd(self, commands_list):
-        self._lmp.commands_list(commands_list)
-
-    def start(self, num_threads=1):
-        self._lmp = lammps.lammps()
-        cmd(f"package omp {num_threads}")
-
-    def close(self):
-        self._lmp.close()
-        self._lmp = None
-
+class LAMMPS(lammps.lammps):
     def run(self, steps):
-        cmd(f"run {steps}")
+        self.command(f"run {steps}")
 
-    def atom_vector_comp(self, comp_name):
-        return self._lmp.numpy.extract_compute(
+    def get_atom_vector_compute(self, comp_name):
+        return self.numpy.extract_compute(
             comp_name, lammps.LMP_STYLE_ATOM, lammps.LMP_TYPE_VECTOR
         )
 
-    def global_vector_comp(self, comp_name):
-        return self._lmp.numpy.extract_compute(
+    def get_global_vector_comp(self, comp_name):
+        return self.numpy.extract_compute(
             comp_name, lammps.LMP_STYLE_GLOBAL, lammps.LMP_TYPE_VECTOR
         )
 
-    def global_scalar_comp(self, comp_name):
-        return self._lmp.numpy.extract_compute(
+    def get_global_scalar_comp(self, comp_name):
+        return self.numpy.extract_compute(
             comp_name, lammps.LMP_STYLE_GLOBAL, lammps.LMP_TYPE_SCALAR
         )
 
-    def atom_array_comp(self, comp_name):
-        return self._lmp.numpy.extract_compute(
+    def get_atom_array_comp(self, comp_name):
+        return self.numpy.extract_compute(
             comp_name, lammps.LMP_STYLE_ATOM, lammps.LMP_TYPE_ARRAY
         )
 
-    def equal_var(self, var_name):
-        return self._lmp.numpy.extract_variable(var_name, vartype=lammps.LMP_VAR_EQUAL)
+    def get_equal_variable(self, var_name):
+        return self.numpy.extract_variable(var_name, vartype=lammps.LMP_VAR_EQUAL)
 
-    def atom_var(self, var_name, group_name):
-        return self._lmp.numpy.extract_variable(
+    def get_atom_variable(self, var_name, group_name):
+        return self.numpy.extract_variable(
             var_name, group=group_name, vartype=lammps.LMP_VAR_ATOM
         )
 
 
 class SIMULATION:
-    def __init__(self, temperature):
-        self._lmp = LAMMPS()
-        self._num_threads = 12
-        self._temps = {"0K": 1e-6, "300K": 300, "700K": 700}
+    def __init__(self, temperature, zero_lvl):
+        self.lmp = None
+        self.num_threads = 1
 
-        self._si_lattice = 5.43
-        self._si_bottom = -16
-        self._si_fixed = si_bottom + 0.5
-        self._si_top = 15.3
+        self.temperature = temperature
+        self.zero_lvl = zero_lvl
 
-        self.temperature = self._temps[temperature]
-        if temperature == "0K":
-            self.zero_lvl = 83.19
-        elif temperature == "700K":
-            self.zero_lvl = 83.391
+    def lmp_start(self):
+        self.lmp = LAMMPS()
+        self.lmp.command(f"package omp {self.num_threads}")
 
-        self._width = 12
-        self._fu_z_coord = 15 + self._si_top * self._si_latticea
+    def lmp_stop(self):
+        self.lmp.close()
+        self.lmp = None
 
-    def start(self):
-        self._lmp.start(self._num_threads)
+    def set_input_file(self, input_file_path):
+        self.input_file_paht = input_file_path
 
-    def stop(self):
-        self._lmp.stop()
+    def set_sim_num(self, sim_num):
+        self.sim_num = sim_num
 
     def set_results_dir(self, results_dir_path):
-        self._results_dir = results_dir_path
+        self.results_dir = results_dir_path
+
+        def write_header(header_str, table_path):
+            with open(table_path, "w", encoding="utf-8") as f:
+                f.write("# " + header_str + "\n")
 
         def results_dir_join(file_path):
-            return path.join(self._results_dir, file_path)
+            return path.join(self.results_dir, file_path)
 
-        self._clusters_table_path = results_dir_join("clusters_table.txt")
-        self._rim_table_path = results_dir_join("rim_table.txt")
-        self._carbon_table_path = results_dir_join("carbon_table.txt")
-        self._crater_table_path = results_dir_join("crater_table.txt")
-        self._carbon_dist_path = results_dir_join("carbon_dist.txt")
+        self.clusters_table = results_dir_join("clusters_table.txt")
+        self.rim_table = results_dir_join("rim_table.txt")
+        self.carbon_table = results_dir_join("carbon_table.txt")
+        self.crater_table = results_dir_join("crater_table.txt")
+        self.carbon_dist = results_dir_join("carbon_dist.txt")
 
-        def init(self):
-            self._lmp.lcmd(
-                [
-                    "units metal",
-                    "dimension 3",
-                    "boundary p p m",
-                    "atom_style atomic",
-                    "atom_modify map yes",
-                ]
-            )
+        write_header("sim_num N_Si N_C mass Px Py Pz Ek angle", self.clusters_table)
+        write_header("sim_num N r_mean r_max z_mean z_max", self.rim_table)
+        write_header("sim_num N r_mean r_max", self.carbon_table)
+        write_header("sim_num N V S z_mean z_min", self.crater_table)
+        write_header("z count", self.carbon_dist)
 
-        def regions(self):
-            self._lmp.lcmd(
-                [
-                    f"lattice diamond {_si_lattice} orient x 1 0 0 orient y 0 1 0 orient z 0 0 1",
-                    f"region si_all block {- _width} {_width} {-_width} {_width} {_si_bottom} {_si_top}",
-                    f"region fixed   block {-_width}  {_width}    {-_width}  {_width} {_si_bottom} {_si_fixed}",
-                    f"region floor   block {-_width}  {_width}    {-_width}  {_width}    {_si_fixed} {_si_fixed+1}",
-                    f"region x_left  block {-_width}  {-_width+1} {-_width}  {_width}    {_si_fixed} {_si_top}",
-                    f"region x_right block {_width-1} {_width}    {-_width}  {_width}    {_si_fixed} {_si_top}",
-                    f"region y_left  block {-_width}  {_width}    {-_width}  {-_width+1} {_si_fixed} {_si_top}",
-                    f"region y_right block {-_width}  {_width}    {_width-1} {_width}    {_si_fixed} {_si_top}",
-                    f"region bath union 5 floor x_right x_left y_right y_left"
-                    f"region clusters block {-_width} {_width} {-_width} {_width} 0 INF"
-                    f"region not_outside block {-_width+2} {_width-2} {-_width+2} {_width - 2} {_si_bottom} {_si_top+2}",
-                ]
-            )
+    def set_si_vars(self, si_bottom, si_top, si_width, si_lattice):
+        self.si_lattice = si_lattice
+        self.si_bottom = si_bottom
+        self.si_top = si_top
+        self.si_width = si_width
+        self.si_fixed = si_bottom + 0.5
 
-            def lmp_add_fu(self):
-                self._lmp.scmd(
-                    f"""
+    def set_fu_vars(self, fu_x, fu_y, fu_z, fu_energy):
+        self.fu_x_coord = fu_x
+        self.fu_y_coord = fu_y
+        self.fu_z_coord = self.si_top * self.si_lattice + fu_z
+        self.fu_speed = fu_energy / 5.174
+
+    def run(self):
+        self.lmp_start()
+        self.init()
+        self.lmp.command(f"read_data {self.input_file_path}")
+
+        self.regions()
+        self.vacancies_restart_file = "./restart.lammps"
+        self.lmp.cmd(f"write_restart {self.vacancies_restart_file}")
+
+        simulation.add_fu()
+        simulation.potentials()
+        simulation.groups()
+
+        simulation_computes()
+        simulation_thermo()
+        simulation_fixes(temperature)
+
+        simulation.cmd(
+            f"dump d_1 all custom 20 {lmp.RESULTS_DIR}/norm_{lmp.sim_num}.dump \
+id t    ype xs ys zs"
+        )
+        lmp.cmd(f"velocity g_fu set NULL NULL {-fu_z_vel} sum yes units box")
+        lmp.run(10000)
+
+        lmp_recalc_zero_lvl(width, si_lattice)
+        lmp_clusters()
+        lmp.cmd("run 1")
+
+        vac_ids = lmp.avar("vacancy_id", "g_si_all")
+        vac_ids = vac_ids[vac_ids != 0]
+        vac_group_command = "group g_vac id " + " ".join(
+            vac_ids.astype(int).astype(str)
+        )
+
+        atom_cluster = lmp.avcomp("clusters")
+        atom_x = self._lmp.numpy.extract_atom("x")
+        atom_id = self._lmp.numpy.extract_atom("id")
+        atom_type = self._lmp.numpy.extract_atom("type")
+        mask, cluster_ids = get_clusters_mask(atom_x, atom_cluster)
+
+        clusters_table = get_clusters_table(cluster_ids)
+        append_table(lmp.CLUSTERS_TABLE, clusters_table)
+        rim_info = get_rim_info(
+            atom_id[~mask & (atom_cluster != 0)], fu_x_coord, fu_y_coord
+        )
+        append_table(lmp.RIM_TABLE, rim_info)
+
+        carbon_hist = get_carbon_hist(atom_x, atom_type, mask)
+        append_table(lmp.CARBON_DIST, carbon_hist, header=str(lmp.sim_num))
+        carbon_info = get_carbon_info(
+            atom_id[~mask & (atom_type == 2)], fu_x_coord, fu_y_coord
+        )
+        append_table(lmp.CARBON_TABLE, carbon_info)
+
+        lmp.close()
+        lmp.start(12)
+        lmp.cmd("read_restart restart.lammps")
+        lmp_potentials()
+        lmp.cmd(vac_group_command)
+        lmp.cmd("group g_si_all type 1")
+        lmp.cmd("compute voro_vol g_si_all voronoi/atom only_group")
+        lmp.cmd("compute clusters g_vac cluster/atom 3")
+        lmp.cmd(
+            f"dump d_clusters g_vac custom 20 {lmp.RESULTS_DIR}/crater_{lmp.sim_num}.dump \
+id x     y z vx vy vz type c_clusters"
+        )
+        lmp.cmd("run 1")
+
+        clusters = lmp.avcomp("clusters")
+        clusters = clusters[clusters != 0]
+        crater_info = get_crater_info(clusters)
+        append_table(lmp.CRATER_TABLE, crater_info)
+
+        lmp.close()
+
+    def init(self):
+        self.lmp.commands_string(
+            f"""
+units       metal
+dimension   3
+boundary    p p m
+atom_style  atomic
+atom_modify map yes
+"""
+        )
+
+    def regions(self):
+        W = self.width
+        self.lmp.commands_string(
+            f"""
+lattice diamond {self.si_lattice} orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
+
+region si_all block {-self.width} {self.width} {-self.width} {self.width} {si_bottom} \
+{si_top} units lattice
+
+region fixed block {-self.width} {self.width} {-self.width} {self.width} {si_bottom} \
+{si_fixed} units lattice
+
+region floor   block {-self.width}  {self.width}    {-self.width}  {self.width}    {si_fixed} \
+{si_fixed+1}
+region x_left  block {-self.width}  {-self.width+1} {-self.width}  {self.width}    {si_fixed} \
+{si_top}
+region x_right block {self.width-1} {self.width}    {-self.width}  {self.width}    {si_fixed} \
+{si_top}
+region y_left  block {-self.width}  {self.width}    {-self.width}  {-self.width+1} {si_fixed} \
+{si_top}
+region y_right block {-self.width}  {self.width}    {self.width-1} {self.width}    {si_fixed} \
+{si_top}
+
+region bath union 5 floor x_right x_left y_right y_left
+
+region clusters block {-self.width} {self.width} {-self.width} {self.width} 0 INF units lattice
+
+region not_outside block {-self.width + 2} {self.width - 2} {-self.width + 2} \
+    {self.width - 2} {si_bottom} {si_top+2} units lattice
+"""
+        )
+
+    def lmp_add_fu(self):
+        self._lmp.scmd(
+            f"""
 molecule m_C60 ./mol.txt
 create_atoms 1 single {_fu_x_coord} {_fu_y_coord} {_fu_z_coord} \
 mol m_C60 1 units box
 """
-                )
+        )
 
-            def lmp_potentials(self):
-                self._lmp.scmd(
-                    """
+    def lmp_potentials(self):
+        self._lmp.scmd(
+            """
 pair_style  hybrid airebo/omp 3.0 tersoff/zbl/omp
 pair_coeff  * * tersoff/zbl/omp SiC.tersoff.zbl Si C
 pair_coeff  2 2 none
 pair_coeff  * * airebo/omp CH.airebo NULL C
 neighbor    3.0 bin
 """
-                )
+        )
 
-            def lmp_groups(self):
-                self._lmp.scmd(
-                    """
+    def lmp_groups(self):
+        self._lmp.scmd(
+            """
 group   fu     type 2
 group   si_all type 1
 group   fixed region fixed
@@ -157,11 +246,11 @@ group   thermostat dynamic si_all region bath
 group   not_outside region not_outside
 group   outside subtract si_all not_outside
 """
-                )
+        )
 
-            def lmp_computes(self):
-                self._lmp.scmd(
-                    f"""
+    def lmp_computes(self):
+        self._lmp.scmd(
+            f"""
 # compute ke per atom
 compute atom_ke all ke/atom
 
@@ -177,32 +266,32 @@ compute   sputter_all  all       reduce sum v_is_sputtered
 compute   sputter_si   g_si_all  reduce sum v_is_sputtered
 compute   sputter_c    g_fu      reduce sum v_is_sputtered
 """
-                )
+        )
 
-            def lmp_thermo(self):
-                self._lmp.scmd(
-                    """
+    def lmp_thermo(self):
+        self._lmp.scmd(
+            """
 reset_timestep 0
 timestep       0.001
 thermo         10
 thermo_style   custom step pe ke etotal temp c_vacancies dt time \
 c_sputter_all c_sputter_c c_sputter_si
 """
-                )
+        )
 
-            def lmp_fixes():
-                self._lmp.scmd(
-                    f"""
+    def lmp_fixes():
+        self._lmp.scmd(
+            f"""
 fix f_1 g_nve nve/omp
 fix f_2 g_thermostat temp/berendsen {temperature} {temperature} 0.001
 fix f_3 all electron/stopping 10.0 ./elstop-table.txt region r_si_all
 fix f_4 all dt/reset 1 0.0005 0.001 0.1
 """
-                )
+        )
 
-            def lmp_clusters(self):
-                self._lmp.scmd(
-                    f"""
+    def lmp_clusters(self):
+        self._lmp.scmd(
+            f"""
 variable is_sputtered delete
 variable is_sputtered atom "z>{lmp.zero_lvl}"
 
@@ -215,7 +304,7 @@ clusters_{lmp.sim_num}.dump id x y z vx vy vz type c_clusters c_atom_ke
 dump d_all all custom 20 {lmp.RESULTS_DIR}/all_{lmp.sim_num}.dump \
 id x y z vx vy vz type c_clusters c_atom_ke
 """
-                )
+        )
 
 
 def get_clusters_table(cluster_ids):
@@ -392,7 +481,7 @@ def lmp_recalc_zero_lvl(width, lattice):
     max_outside_z = lmp.gscomp("max_outside_z")
 
     lmp.cmd(
-        f"region surface block {-width} {width} {-width} {width} \
+        f"region surface block {-self.width} {self.width} {-self.width} {self.width} \
 {(max_outside_z - 1.35)/lattice} {max_outside_z/lattice} units lattice"
     )
     lmp.cmd("group surface region surface")
@@ -414,7 +503,7 @@ def main(simulation, fu_x_coord, fu_y_coord, fu_z_vel):
     simulation.init()
     simulation._lmp.cmd("read_data ./input_files/fall700.input.data")
 
-    simulation.regions(si_lattice, width, si_top, si_bottom, si_fixed)
+    simulation.regions(si_lattice, self.width, si_top, si_bottom, si_fixed)
     simulation._lmp.cmd("write_restart restart.lammps")
 
     simulation.add_fu(fu_x_coord, fu_y_coord, fu_z_coord)
@@ -432,7 +521,7 @@ id type xs ys zs"
     lmp.cmd(f"velocity g_fu set NULL NULL {-fu_z_vel} sum yes units box")
     lmp.run(10000)
 
-    lmp_recalc_zero_lvl(width, si_lattice)
+    lmp_recalc_zero_lvl(self.width, si_lattice)
     lmp_clusters()
     lmp.cmd("run 1")
 
@@ -483,30 +572,25 @@ id x y z vx vy vz type c_clusters"
 
 
 if __name__ == "__main__":
-    simulation = SIMULATION()
+    # 0K - 83.19 | 700K - 83.391
+    simulation = SIMULATION(temperature=700, zero_lvl=83.391)
+    simulation.set_si_vars(si_bottom=-16, si_top=15.3, si_width=12, si_lattice=5.43)
+
+    simulation.set_input_file("./input_files/fall700.input.data")
     simulation.set_results_dir("./results")
 
-    def write_header(header_str, table):
-        with open(table, "w", encoding="utf-8") as file:
-            file.write("# " + header_str + "\n")
-
-    write_header("sim_num N_Si N_C mass Px Py Pz Ek angle", lmp.CLUSTERS_TABLE)
-    write_header("sim_num N r_mean r_max z_mean z_max", lmp.RIM_TABLE)
-    write_header("sim_num N r_mean r_max", lmp.CARBON_TABLE)
-    write_header("sim_num N V S z_mean z_min", lmp.CRATER_TABLE)
-    write_header("z count", lmp.CARBON_DIST)
-
     def rand_coord():
-        return 5.43 * (np.random.rand() * 2 - 1)
+        return simulation.si_lattice * (np.random.rand() * 2 - 1)
 
     for i in range(1):
-        lmp.sim_num = i + 1
+        simulation.set_sim_num(i + 1)
 
         x = rand_coord()
         y = rand_coord()
 
         try:
-            main(x, y, 633.72)
+            simulation.set_fu_vars(fu_energy=2000, fu_x=x, fu_y=y, fu_z=15)
+            simulation.run()
         except lammps.MPIAbortException:
             pass
         except Exception as e:

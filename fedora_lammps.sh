@@ -31,7 +31,7 @@ export MPI_HOME=/usr/lib64/openmpi
 
 build_options=(
     BUILD_MPI
-    BUILD_OMP
+    PKG_OPENMP
     PKG_BODY
     PKG_MANYBODY
     PKG_MISC
@@ -54,3 +54,4 @@ cmake $cmake_flags .
 
 make -j10
 make install
+make install-python
