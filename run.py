@@ -14,17 +14,17 @@ class LAMMPS(lammps.lammps):
             comp_name, lammps.LMP_STYLE_ATOM, lammps.LMP_TYPE_VECTOR
         )
 
-    def get_global_vector_comp(self, comp_name):
+    def get_global_vector_compute(self, comp_name):
         return self.numpy.extract_compute(
             comp_name, lammps.LMP_STYLE_GLOBAL, lammps.LMP_TYPE_VECTOR
         )
 
-    def get_global_scalar_comp(self, comp_name):
+    def get_global_scalar_compute(self, comp_name):
         return self.numpy.extract_compute(
             comp_name, lammps.LMP_STYLE_GLOBAL, lammps.LMP_TYPE_SCALAR
         )
 
-    def get_atom_array_comp(self, comp_name):
+    def get_atom_array_compute(self, comp_name):
         return self.numpy.extract_compute(
             comp_name, lammps.LMP_STYLE_ATOM, lammps.LMP_TYPE_ARRAY
         )
@@ -124,7 +124,6 @@ id type xs ys zs"
 
         self.recalc_zero_lvl()
         self.clusters()
-        self.lmp.run(1)
 
         vac_ids = self.lmp.get_atom_variable("vacancy_id", "si_all")
         vac_ids = vac_ids[vac_ids != 0]
@@ -138,35 +137,31 @@ id type xs ys zs"
 
         clusters_table = self.get_clusters_table(cluster_ids)
         self.append_table(self.clusters_table, clusters_table)
-        rim_info = get_rim_info(
-            atom_id[~mask & (atom_cluster != 0)], fu_x_coord, fu_y_coord
-        )
+        rim_info = self.get_rim_info(atom_id[~mask & (atom_cluster != 0)])
         self.append_table(self.rim_table, rim_info)
 
-        carbon_hist = get_carbon_hist(atom_x, atom_type, mask)
+        carbon_hist = self.get_carbon_hist(atom_x, atom_type, mask)
         self.append_table(self.carbon_dist, carbon_hist, header=str(self.sim_num))
-        carbon_info = get_carbon_info(
-            atom_id[~mask & (atom_type == 2)], fu_x_coord, fu_y_coord
-        )
+        carbon_info = self.get_carbon_info(atom_id[~mask & (atom_type == 2)])
         self.append_table(self.carbon_table, carbon_info)
 
         self.lmp_stop()
         self.lmp_start()
         self.lmp.command(f"read_restart {self.vacancies_restart_file}")
-        potentials()
+        self.potentials()
         self.lmp.command(vac_group_command)
         self.lmp.command("group si_all type 1")
         self.lmp.command("compute voro_vol si_all voronoi/atom only_group")
         self.lmp.command("compute clusters vac cluster/atom 3")
         self.lmp.command(
-            f"dump clusters g_vac custom 20 {self.results_dir}/crater_{self.sim_num}.dump \
+            f"dump clusters vac custom 20 {self.results_dir}/crater_{self.sim_num}.dump \
 id x     y z vx vy vz type c_clusters"
         )
         self.lmp.command("run 1")
 
         clusters = self.lmp.get_atom_vector_compute("clusters")
         clusters = clusters[clusters != 0]
-        crater_info = get_crater_info(clusters)
+        crater_info = self.get_crater_info(clusters)
         self.append_table(self.crater_table, crater_info)
 
         self.lmp.close()
@@ -327,10 +322,10 @@ id x y z vx vy vz type c_clusters c_atom_ke
                sqrt(c_{smom}[1]^2+c_{smom}[2]^2))"'
             )
 
-            comp_c = self.lmp.get_global_scalar_comp(f"{cluster_id}_c")
-            comp_si = self.lmp.get_global_scalar_comp(f"{cluster_id}_si")
-            comp_mom = self.lmp.get_global_vector_comp(f"{cluster_id}_mom")
-            comp_mass = self.lmp.get_global_scalar_comp(f"{cluster_id}_mass")
+            comp_c = self.lmp.get_global_scalar_compute(f"{cluster_id}_c")
+            comp_si = self.lmp.get_global_scalar_compute(f"{cluster_id}_si")
+            comp_mom = self.lmp.get_global_vector_compute(f"{cluster_id}_mom")
+            comp_mass = self.lmp.get_global_scalar_compute(f"{cluster_id}_mass")
             var_ek = self.lmp.get_equal_variable(f"{cluster_id}_ek")
             var_angle = self.lmp.get_equal_variable(f"{cluster_id}_angle")
             table = np.concatenate(
@@ -375,17 +370,17 @@ id x y z vx vy vz type c_clusters c_atom_ke
             "group g_rim id " + " ".join(group_ids.astype(int).astype(str))
         )
         self.lmp.command(
-            f'variable r_rim atom "sqrt((x-{fu_x_coord})^2+\
-           (y-{fu_y_coord})^2)"'
+            f'variable r_rim atom "sqrt((x-{self.fu_x_coord})^2+\
+           (y-{self.fu_y_coord})^2)"'
         )
         self.lmp.command("compute r_rim_sum g_rim reduce sum v_r_rim")
         self.lmp.command("compute r_rim_max g_rim reduce max v_r_rim")
-        r_max = self.lmp.get_global_scalar_comp("r_rim_max")
-        r_mean = self.lmp.get_global_scalar_comp("r_rim_sum") / len(group_ids)
+        r_max = self.lmp.get_global_scalar_compute("r_rim_max")
+        r_mean = self.lmp.get_global_scalar_compute("r_rim_sum") / len(group_ids)
         self.lmp.command("compute rim_z_sum g_rim reduce sum z")
         self.lmp.command("compute rim_z_max g_rim reduce max z")
-        z_mean = self.lmp.get_global_scalar_comp("rim_z_sum") / len(group_ids)
-        z_max = self.lmp.get_global_scalar_comp("rim_z_max")
+        z_mean = self.lmp.get_global_scalar_compute("rim_z_sum") / len(group_ids)
+        z_max = self.lmp.get_global_scalar_compute("rim_z_max")
         self.lmp.command('variable rim_count equal "count(g_rim)"')
         rim_count = self.lmp.get_equal_variable("rim_count")
 
@@ -402,15 +397,15 @@ id x y z vx vy vz type c_clusters c_atom_ke
             ]
         )
 
-    def get_crater_info(clusters):
+    def get_crater_info(self, clusters):
         crater_id = np.bincount(clusters.astype(int)).argmax()
         self.lmp.command(f'variable is_crater atom "c_clusters=={crater_id}"')
         self.lmp.command("group g_vac clear")
         self.lmp.command("group g_vac variable is_crater")
 
         self.lmp.command("compute crater_num g_vac reduce sum v_is_crater")
-        crater_count = self.lmp.get_global_scalar_comp("crater_num")
-        voronoi = self.lmp.get_atom_array_comp("voro_vol")
+        crater_count = self.lmp.get_global_scalar_compute("crater_num")
+        voronoi = self.lmp.get_atom_array_compute("voro_vol")
         cell_vol = np.median(voronoi, axis=0)[0]
         crater_vol = cell_vol * crater_count
 
@@ -422,9 +417,11 @@ id x y z vx vy vz type c_clusters c_atom_ke
 
         self.lmp.command("compute crater_z_mean g_vac reduce sum z")
         self.lmp.command("compute crater_z_min g_vac reduce min z")
-        crater_z_min = self.lmp.get_global_scalar_comp("crater_z_min") - self.zero_lvl
+        crater_z_min = (
+            self.lmp.get_global_scalar_compute("crater_z_min") - self.zero_lvl
+        )
         crater_z_mean = (
-            self.lmp.get_global_scalar_comp("crater_z_mean") / crater_count
+            self.lmp.get_global_scalar_compute("crater_z_mean") / crater_count
             - self.zero_lvl
         )
 
@@ -441,7 +438,7 @@ id x y z vx vy vz type c_clusters c_atom_ke
             ]
         )
 
-    def get_carbon_hist(atom_x, atom_type, mask):
+    def get_carbon_hist(self, atom_x, atom_type, mask):
         mask = (atom_type == 2) & ~mask
         z_coords = np.around(atom_x[mask][:, 2] - self.zero_lvl, 1)
         right = int(np.ceil(z_coords.max()))
@@ -454,18 +451,18 @@ id x y z vx vy vz type c_clusters c_atom_ke
 
         return hist
 
-    def get_carbon_info(group_ids, fu_x_coord, fu_y_coord):
+    def get_carbon_info(self, group_ids):
         self.lmp.command(
             "group g_carbon id " + " ".join(group_ids.astype(int).astype(str))
         )
         self.lmp.command(
-            f'variable r_carbon atom "sqrt((x-{fu_x_coord})^2+\
-           (y-{fu_y_coord})^2)"'
+            f'variable r_carbon atom "sqrt((x-{self.fu_x_coord})^2+\
+           (y-{self.fu_y_coord})^2)"'
         )
         self.lmp.command("compute r_carbon_sum g_carbon reduce sum v_r_carbon")
         self.lmp.command("compute r_carbon_max g_carbon reduce max v_r_carbon")
-        r_max = self.lmp.get_global_scalar_comp("r_carbon_max")
-        r_mean = self.lmp.get_global_scalar_comp("r_carbon_sum") / len(group_ids)
+        r_max = self.lmp.get_global_scalar_compute("r_carbon_max")
+        r_mean = self.lmp.get_global_scalar_compute("r_carbon_sum") / len(group_ids)
         self.lmp.command('variable carbon_count equal "count(g_carbon)"')
         count = self.lmp.get_equal_variable("carbon_count")
 
@@ -477,7 +474,7 @@ id x y z vx vy vz type c_clusters c_atom_ke
 
     def recalc_zero_lvl(self):
         self.lmp.command("compute max_outside_z outside reduce max z")
-        max_outside_z = self.lmp.get_global_scalar_comp("max_outside_z")
+        max_outside_z = self.lmp.get_global_scalar_compute("max_outside_z")
 
         self.lmp.command(
             f"region surface block {-self.si_width} {self.si_width} {-self.si_width} {self.si_width} \
@@ -487,7 +484,7 @@ id x y z vx vy vz type c_clusters c_atom_ke
         self.lmp.command("group outside_surface intersect surface outside")
 
         self.lmp.command("compute ave_outside_z outside_surface reduce ave z")
-        ave_outside_z = self.lmp.get_global_scalar_comp("ave_outside_z")
+        ave_outside_z = self.lmp.get_global_scalar_compute("ave_outside_z")
         delta = max_outside_z - ave_outside_z
         self.zero_lvl = ave_outside_z + delta * 2
 
@@ -496,7 +493,7 @@ id x y z vx vy vz type c_clusters c_atom_ke
         print("new zer_lvl:", self.zero_lvl)
 
 
-if __name__ == "__main__":
+def main():
     # 0K - 83.19 | 700K - 83.391
     simulation = SIMULATION(
         temperature=700, zero_lvl=83.391, run_time=100, num_threads=12
@@ -525,3 +522,7 @@ if __name__ == "__main__":
             pass
 
     print("*** FINISHED COMPLETELY ***")
+
+
+if __name__ == "__main__":
+    main()
