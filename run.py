@@ -94,7 +94,7 @@ class SIMULATION:
         self.fu_x_coord = fu_x
         self.fu_y_coord = fu_y
         self.fu_z_coord = self.si_top * self.si_lattice + fu_z
-        self.fu_speed = fu_energy / 5.174
+        self.fu_speed = np.sqrt(fu_energy) * 5.174
 
     def run(self):
         self.lmp_start()
@@ -124,6 +124,7 @@ id type xs ys zs"
 
         self.recalc_zero_lvl()
         self.clusters()
+        self.lmp.run(1)
 
         vac_ids = self.lmp.get_atom_variable("vacancy_id", "si_all")
         vac_ids = vac_ids[vac_ids != 0]
@@ -400,23 +401,23 @@ id x y z vx vy vz type c_clusters c_atom_ke
     def get_crater_info(self, clusters):
         crater_id = np.bincount(clusters.astype(int)).argmax()
         self.lmp.command(f'variable is_crater atom "c_clusters=={crater_id}"')
-        self.lmp.command("group g_vac clear")
-        self.lmp.command("group g_vac variable is_crater")
+        self.lmp.command("group vac clear")
+        self.lmp.command("group vac variable is_crater")
 
-        self.lmp.command("compute crater_num g_vac reduce sum v_is_crater")
+        self.lmp.command("compute crater_num vac reduce sum v_is_crater")
         crater_count = self.lmp.get_global_scalar_compute("crater_num")
         voronoi = self.lmp.get_atom_array_compute("voro_vol")
         cell_vol = np.median(voronoi, axis=0)[0]
         crater_vol = cell_vol * crater_count
 
         self.lmp.command(f'variable is_surface atom "z>-2.4*0.707+{self.zero_lvl}"')
-        self.lmp.command("compute surface_count g_vac reduce sum v_is_surface")
+        self.lmp.command("compute surface_count vac reduce sum v_is_surface")
         surface_count = self.lmp.get_global_scalar_compute("surface_count")
         cell_surface = 7.3712
         surface_area = cell_surface * surface_count
 
-        self.lmp.command("compute crater_z_mean g_vac reduce sum z")
-        self.lmp.command("compute crater_z_min g_vac reduce min z")
+        self.lmp.command("compute crater_z_mean vac reduce sum z")
+        self.lmp.command("compute crater_z_min vac reduce min z")
         crater_z_min = (
             self.lmp.get_global_scalar_compute("crater_z_min") - self.zero_lvl
         )
@@ -513,7 +514,7 @@ def main():
         y = rand_coord()
 
         try:
-            simulation.set_fu_vars(fu_energy=2000, fu_x=x, fu_y=y, fu_z=15)
+            simulation.set_fu_vars(fu_energy=8_000, fu_x=x, fu_y=y, fu_z=15)
             simulation.run()
         except lammps.MPIAbortException:
             pass
