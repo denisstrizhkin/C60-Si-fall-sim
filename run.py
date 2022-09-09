@@ -474,8 +474,12 @@ id x y z vx vy vz type c_clusters c_atom_ke
             np.savetxt(file, table, delimiter="\t", fmt="%.5f", header=header)
 
     def recalc_zero_lvl(self):
-        self.lmp.command("compute max_outside_z outside reduce max z")
-        max_outside_z = self.lmp.get_global_scalar_compute("max_outside_z")
+        self.lmp.command("variable outside_z atom z")
+        outside_z = self.lmp.get_atom_variable("outside_z", "outside")
+        outside_z = np.sort(outside_z)[-20:]
+        max_outside_z = outside_z.mean()
+        # self.lmp.command("compute max_outside_z outside reduce max z")
+        # max_outside_z = self.lmp.get_global_scalar_compute("max_outside_z")
 
         self.lmp.command(
             f"region surface block {-self.si_width} {self.si_width} {-self.si_width} {self.si_width} \
@@ -489,6 +493,7 @@ id x y z vx vy vz type c_clusters c_atom_ke
         delta = max_outside_z - ave_outside_z
         self.zero_lvl = ave_outside_z + delta * 2
 
+        print("max_outside_z:", max_outside_z)
         print("ave_outside_z:", ave_outside_z)
         print("delta:", delta)
         print("new zer_lvl:", self.zero_lvl)
