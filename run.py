@@ -352,8 +352,8 @@ id x y z vx vy vz type c_clusters c_atom_ke
             self.lmp.command(f"uncompute {smom}")
             self.lmp.command(f"group {group} delete")
 
-            table = table.reshape((table.shape[0] // 9, 9))
-            return table
+        table = table.reshape((table.shape[0] // 9, 9))
+        return table
 
     def get_clusters_mask(self, atom_x, atom_cluster):
         mask_1 = atom_cluster != 0
@@ -500,9 +500,12 @@ id x y z vx vy vz type c_clusters c_atom_ke
 
 
 def main():
+    energy = 8_000
+    run_time = int(energy * (5 / 4))
+
     # 0K - 83.19 | 700K - 83.391
     simulation = SIMULATION(
-        temperature=700, zero_lvl=83.391, run_time=100, num_threads=12
+        temperature=700, zero_lvl=83.391, run_time=500, num_threads=12
     )
     simulation.set_si_vars(si_bottom=-16, si_top=15.3, si_width=12, si_lattice=5.43)
 
@@ -519,7 +522,7 @@ def main():
         y = rand_coord()
 
         try:
-            simulation.set_fu_vars(fu_energy=8_000, fu_x=x, fu_y=y, fu_z=15)
+            simulation.set_fu_vars(fu_energy=energy, fu_x=x, fu_y=y, fu_z=15)
             simulation.run()
         except lammps.MPIAbortException:
             pass
