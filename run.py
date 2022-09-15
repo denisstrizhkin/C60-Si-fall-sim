@@ -114,7 +114,7 @@ class SIMULATION:
         self.fixes()
 
         self.lmp.command(
-            f"dump 1 all custom 20 {self.results_dir}/norm_{self.sim_num}.dump \
+            f"dump 1 all custom 2000 {self.results_dir}/norm_{self.sim_num}.dump \
 id type xs ys zs"
         )
         self.lmp.command(
@@ -503,13 +503,15 @@ def main():
     energy = 8_000
     run_time = int(energy * (5 / 4))
 
-    # 0K - 83.19 | 700K - 83.391
+    # 0K    -  83.19
+    # 300K  -  82.4535
+    # 700K  -  83.391
     simulation = SIMULATION(
-        temperature=700, zero_lvl=83.391, run_time=500, num_threads=12
+        temperature=300, zero_lvl=82.4535, run_time=run_time, num_threads=12
     )
     simulation.set_si_vars(si_bottom=-16, si_top=15.3, si_width=12, si_lattice=5.43)
 
-    simulation.set_input_file("./input_files/fall700.input.data")
+    simulation.set_input_file("./input_files/fall300.input.data")
     simulation.set_results_dir("./results")
 
     def rand_coord():
