@@ -506,12 +506,25 @@ def main():
     # 0K    -  83.19
     # 300K  -  82.4535
     # 700K  -  83.391
+    temperature = 0
+    input_file_root = "./input_file"
+
+    if temperature == 0:
+        zero_lvl = 83.19
+        input_file_path = path.join(input_file_root, "fall.input.data")
+    elif temperature == 300:
+        zero_lvl = 82.4535
+        input_file_path = path.join(input_file_root, "fall300.input.data")
+    elif temperature == 700:
+        zero_lvl = 83.391
+        input_file_path = path.join(input_file_root, "fall700.input.data")
+
     simulation = SIMULATION(
-        temperature=300, zero_lvl=82.4535, run_time=run_time, num_threads=12
+        temperature=temperature, zero_lvl=zero_lvl, run_time=run_time, num_threads=12
     )
     simulation.set_si_vars(si_bottom=-16, si_top=15.3, si_width=12, si_lattice=5.43)
 
-    simulation.set_input_file("./input_files/fall300.input.data")
+    simulation.set_input_file(input_file_path)
     simulation.set_results_dir("./results")
 
     def rand_coord():
