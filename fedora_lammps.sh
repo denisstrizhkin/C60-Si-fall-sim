@@ -52,7 +52,7 @@ if [ "$is_apt" -eq 1 ]; then
         cmake
         clang
         libomp-dev
-        openmpi-dev
+        libopenmpi-dev
         ffmpeg
         voro++-dev
         python3-dev
