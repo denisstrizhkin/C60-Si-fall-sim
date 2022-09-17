@@ -56,6 +56,7 @@ if [ "$is_apt" -eq 1 ]; then
         ffmpeg
         voro++-dev
         python3-dev
+        python3-venv
     )
 
     sudo apt install ${packages[*]}
@@ -89,6 +90,6 @@ cmake ../cmake
 cmake $cmake_flags .
 
 # Compile and install
-make -j10
+make -j$(nproc)
 make install
 make install-python
