@@ -18,9 +18,13 @@ SRC_DIR="$HOME"/Desktop/src/lammps
 if [ ! -d "$SRC_DIR" ]; then
     mkdir -p "$SRC_DIR"
     git clone -b release https://github.com/lammps/lammps.git "$SRC_DIR"
+    mkdir build
 fi
 cd "$SRC_DIR"
-mkdir build
+
+if [ ! -d build ]; then
+    mkdir build
+fi
 cd build
 
 # Install required dnf packages
