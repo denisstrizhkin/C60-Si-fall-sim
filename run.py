@@ -507,7 +507,7 @@ def main():
     # 300K  -  82.4535
     # 700K  -  83.391
     temperature = 0
-    input_file_root = "./input_file"
+    input_file_root = "./input_files"
 
     if temperature == 0:
         zero_lvl = 83.19
