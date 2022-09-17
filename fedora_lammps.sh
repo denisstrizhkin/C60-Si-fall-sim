@@ -1,5 +1,16 @@
 #!/bin/bash
 
+set -e
+
+if [ ! -z "$(which dnf)" ]; then
+    is_dnf = 1
+fi
+
+
+if [ ! -z "$(which apt)" ]; then
+    is_apt = 1
+fi
+
 SRC_DIR="$HOME"/Desktop/src/lammps
 if [ ! -d "$SRC_DIR" ]; then
     mkdir -p "$SRC_DIR"
@@ -10,9 +21,21 @@ mkdir build
 cd build
 
 # Install rpmfusion repo
-if [ -z "$(dnf list installed | grep "^rpmfusion-free")" ];
+if [ -z "$(dnf list installed | grep "^rpmfusion-free")" ] && [ $is_dnf -eq 1 ];
 then
     sudo dnf install https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm
+
+    packages=(
+        cmake
+        clang
+        libomp-devel
+        openmpi-devel
+        ffmpeg
+        voro++-devel
+        python3-devel
+    )
+
+    sudo dnf install ${packages[*]}
 fi
 
 packages=(
@@ -25,7 +48,7 @@ packages=(
     python3-devel
 )
 
-sudo dnf install ${packages[*]}
+sudo apt install ${packages[*]}
 
 export MPI_HOME=/usr/lib64/openmpi
 
