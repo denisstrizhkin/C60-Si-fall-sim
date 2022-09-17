@@ -1,16 +1,19 @@
 #!/bin/bash
 
+# Stop script on error
 set -e
 
+# Check if dnf is present
 if [ ! -z "$(which dnf)" ]; then
     is_dnf=1
 fi
 
-
+# Check if apt is present
 if [ ! -z "$(which apt)" ]; then
     is_apt=1
 fi
 
+# Clone lammps repo
 SRC_DIR="$HOME"/Desktop/src/lammps
 if [ ! -d "$SRC_DIR" ]; then
     mkdir -p "$SRC_DIR"
@@ -20,10 +23,11 @@ cd "$SRC_DIR"
 mkdir build
 cd build
 
-# Install rpmfusion repo
-if [ -z "$(dnf list installed | grep "^rpmfusion-free")" ] && [ $is_dnf -eq 1 ];
-then
-    sudo dnf install https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm
+# Install required dnf packages
+if [ "$is_dnf" -eq 1 ]; then
+    if [ -z "$(dnf list installed | grep "^rpmfusion-free")" ]; then
+        sudo dnf install https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm
+    fi
 
     packages=(
         cmake
@@ -38,20 +42,25 @@ then
     sudo dnf install ${packages[*]}
 fi
 
-packages=(
-    cmake
-    clang
-    libomp-devel
-    openmpi-devel
-    ffmpeg
-    voro++-devel
-    python3-devel
-)
+# Install required apt packages
+if [ "$is_apt" -eq 1 ]; then
+    packages=(
+        cmake
+        clang
+        libomp-dev
+        openmpi-dev
+        ffmpeg
+        voro++-dev
+        python3-dev
+    )
 
-sudo apt install ${packages[*]}
+    sudo apt install ${packages[*]}
+fi
 
+# Set openmpi lib path
 export MPI_HOME=/usr/lib64/openmpi
 
+# Set cmake flags
 build_options=(
     BUILD_MPI
     PKG_OPENMP
@@ -75,6 +84,7 @@ done
 cmake ../cmake
 cmake $cmake_flags .
 
+# Compile and install
 make -j10
 make install
 make install-python
