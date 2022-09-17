@@ -3,12 +3,12 @@
 set -e
 
 if [ ! -z "$(which dnf)" ]; then
-    is_dnf = 1
+    is_dnf=1
 fi
 
 
 if [ ! -z "$(which apt)" ]; then
-    is_apt = 1
+    is_apt=1
 fi
 
 SRC_DIR="$HOME"/Desktop/src/lammps
