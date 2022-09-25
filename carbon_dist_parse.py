@@ -11,8 +11,8 @@ def write_header(header_str, table_path):
 
 
 def append_table(filename, table, header=""):
-    with open(filename, "ab") as file:
-        np.savetxt(file, table, delimiter="\t", fmt="%d", header=header)
+    with open(filename, "wb") as file:
+        np.savetxt(file, table, delimiter="\t", fmt="%.1f", header=header)
 
 
 def main():
@@ -36,20 +36,23 @@ def main():
         z_max = max(lines_dic[key][len(lines_dic[key]) - 1][0], z_max)
 
     bins = np.linspace(z_min, z_max, int(z_max - z_min) + 1)
-    table = np.zeros((len(lines_dic), len(bins) + 1))
+    table = np.zeros((len(lines_dic) + 1, len(bins) + 1))
 
     sim_nums = list(lines_dic.keys())
     for i in range(0, len(sim_nums)):
-        table[i][0] = sim_nums[i]
+        table[i + 1][0] = sim_nums[i]
         for pair in lines_dic[sim_nums[i]]:
             index = int(pair[0] - z_min)
-            table[i][index + 1] = pair[1]
+            table[i + 1][index + 1] = pair[1]
+
+    for i in range(0, len(bins)):
+        table[0][i + 1] = bins[i]
 
     header_str = "simN " + " ".join(list(map(str, bins)))
 
     output_path = path.splitext(file_path)[0] + "_parsed" + path.splitext(file_path)[1]
-    write_header(header_str, output_path)
-    append_table(output_path, table)
+    # write_header(header_str, output_path)
+    append_table(output_path, table.T)
 
 
 if __name__ == "__main__":
