@@ -31,7 +31,8 @@ def main():
 
         clusters_dic[cluster_str][sim_num] += 1
 
-    total_sims = len(np.unique(clusters[:, 0]))
+    # total_sims = len(np.unique(clusters[:, 0]))
+    total_sims = 50
     total_clusters = len(clusters_dic.keys())
 
     table = np.zeros((total_sims, total_clusters + 1))
