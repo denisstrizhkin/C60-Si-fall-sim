@@ -1,15 +1,4 @@
-# VARIABLES
-# variable width equal "4.0"
-# variable depth equal "16.0"
-#
-# variable end_temp equal "700.0"
-# variable start_temp equal "1.0"
-#
-# variable heat_time equal "10000"
-#
-# variable tdamp equal "100.0"
-
-command omp 8
+package omp 8
 suffix omp
 
 # INIT
@@ -20,6 +9,9 @@ atom_style atomic
 atom_modify map yes
 
 # CREATE SYMULATION BOX
+variable width equal 4
+variable depth equal 16
+
 variable xl equal "-v_width"
 variable xr equal "v_width"
 
@@ -36,7 +28,7 @@ variable z_offset equal "v_depth * v_lattice + 2.0"
 # SET LATTICE
 lattice diamond ${lattice} orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
 
-region  r_symbox block ${xl} ${xr} ${yl} ${yr} ${zd} 50.0 units lattice
+region  r_symbox block ${xl} ${xr} ${yl} ${yr} ${zd} 100.0 units lattice
 create_box 1 r_symbox
 change_box all x scale 3.0 y scale 3.0
 
@@ -59,7 +51,6 @@ read_data input.data add append shift -${xy_offset} 0.0           0.0
 # CREATE ATOMS
 variable zf equal "-v_depth + 0.25"
 
-region  r_si_all block ${xl} ${xr} ${yl} ${yr} ${zd} 15.5  units lattice
 region  r_si_fix block ${xl} ${xr} ${yl} ${yr} ${zd} ${zf} units lattice
 
 region  r_top    block ${xl} ${xr} ${yl} ${yr} 15.0 15.5 units lattice
@@ -72,7 +63,7 @@ pair_coeff * * potentials/SiC.tersoff.zbl Si
 neighbor 3.0 bin
 
 # GROUPS
-group g_si_all region r_si_all
+group g_si_all type 1
 group g_si_fix region r_si_fix
 
 group g_top region r_top
@@ -110,5 +101,5 @@ dump  d_all all custom 20 all.dump id type x y z vx vy vz
 fix f_nve g_si nve/omp
 fix extra2 all print 10 "${step} ${top_avrg}" file graph2.txt screen no
 
-run 2000 
+run 5000
 write_data output.data
