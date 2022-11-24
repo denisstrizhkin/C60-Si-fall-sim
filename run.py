@@ -506,7 +506,7 @@ def main():
     # 0K    -  83.19
     # 300K  -  82.4535
     # 700K  -  83.391
-    temperature = 0
+    temperature = 1000
     input_file_root = "./input_files"
 
     if temperature == 0:
@@ -518,9 +518,12 @@ def main():
     elif temperature == 700:
         zero_lvl = 83.391
         input_file_path = path.join(input_file_root, "fall700.input.data")
+    elif temperature == 1000:
+        zero_lvl = 84.0147
+        input_file_path = path.join(input_file_root, "fall1000.input.data")
 
     simulation = SIMULATION(
-        temperature=temperature, zero_lvl=zero_lvl, run_time=run_time, num_threads=12
+        temperature=temperature, zero_lvl=zero_lvl, run_time=run_time, num_threads=8
     )
     simulation.set_si_vars(si_bottom=-16, si_top=15.3, si_width=12, si_lattice=5.43)
 
