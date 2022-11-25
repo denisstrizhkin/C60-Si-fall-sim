@@ -5,6 +5,21 @@ import lammps
 import numpy as np
 
 
+def write_header(header_str, table_path):
+    with open(table_path, "w", encoding="utf-8") as f:
+        f.write("# " + header_str + "\n")
+
+
+def append_table(filename, table, header="", type="f", precision=5):
+    if type == "d":
+        fmt_str = "%d"
+    elif type == "f":
+        fmt_str = f"%.{precision}"
+
+    with open(filename, "wb") as file:
+        np.savetxt(file, table, delimiter="\t", fmt=fmt_str, header=header)
+
+
 class LAMMPS(lammps.lammps):
     def run(self, steps):
         self.command(f"run {steps}")
@@ -145,6 +160,7 @@ id type xs ys zs"
         self.append_table(self.carbon_dist, carbon_hist, header=str(self.sim_num))
         carbon_info = self.get_carbon_info(atom_id[~mask & (atom_type == 2)])
         self.append_table(self.carbon_table, carbon_info)
+        self.carbon_dist_parse()
 
         self.lmp_stop()
         self.lmp_start()
@@ -469,10 +485,6 @@ id x y z vx vy vz type c_clusters c_atom_ke
 
         return np.array([[self.sim_num, count, r_mean, r_max]])
 
-    def append_table(self, filename, table, header=""):
-        with open(filename, "ab") as file:
-            np.savetxt(file, table, delimiter="\t", fmt="%.5f", header=header)
-
     def recalc_zero_lvl(self):
         self.lmp.command("variable outside_z atom z")
         outside_z = self.lmp.get_atom_variable("outside_z", "outside")
@@ -497,6 +509,47 @@ id x y z vx vy vz type c_clusters c_atom_ke
         print("ave_outside_z:", ave_outside_z)
         print("delta:", delta)
         print("new zer_lvl:", self.zero_lvl)
+
+    def carbon_dist_parse(self):
+        file_path = self.carbon_dist
+
+        with open(file_path, "r") as f:
+            lines = f.readlines()
+
+        lines_dic = {}
+        for i in range(1, len(lines)):
+            if lines[i][0] == "#":
+                sim_num = int(lines[i].strip().split()[1])
+                lines_dic[sim_num] = []
+            else:
+                lines_dic[sim_num].append(list(map(float, lines[i].strip().split())))
+
+        z_min = 0
+        z_max = 0
+        for key in lines_dic.keys():
+            z_min = min(lines_dic[key][0][0], z_min)
+            z_max = max(lines_dic[key][len(lines_dic[key]) - 1][0], z_max)
+
+        bins = np.linspace(z_min, z_max, int(z_max - z_min) + 1)
+        table = np.zeros((len(lines_dic) + 1, len(bins) + 1))
+
+        sim_nums = list(lines_dic.keys())
+        for i in range(0, len(sim_nums)):
+            table[i + 1][0] = sim_nums[i]
+            for pair in lines_dic[sim_nums[i]]:
+                index = int(pair[0] - z_min)
+                table[i + 1][index + 1] = pair[1]
+
+        for i in range(0, len(bins)):
+            table[0][i + 1] = bins[i]
+
+        header_str = "simN " + " ".join(list(map(str, bins)))
+
+        output_path = (
+            path.splitext(file_path)[0] + "_parsed" + path.splitext(file_path)[1]
+        )
+        # write_header(header_str, output_path)
+        append_table(output_path, table.T)
 
 
 def main():
