@@ -14,10 +14,166 @@ def append_table(filename, table, header="", type="f", precision=5):
     if type == "d":
         fmt_str = "%d"
     elif type == "f":
-        fmt_str = f"%.{precision}"
+        fmt_str = f"%.{precision}f"
 
-    with open(filename, "wb") as file:
+    with open(filename, "ab") as file:
         np.savetxt(file, table, delimiter="\t", fmt=fmt_str, header=header)
+
+
+def write_table(filename, table, header, type="f", precision=5):
+    write_header(header, filename)
+    append_table(filename, table, type=type, precision=precision)
+
+
+def carbon_dist_parse(file_path):
+    with open(file_path, "r") as f:
+        lines = f.readlines()
+
+    lines_dic = {}
+    for i in range(1, len(lines)):
+        if lines[i][0] == "#":
+            sim_num = int(lines[i].strip().split()[1])
+            lines_dic[sim_num] = []
+        else:
+            lines_dic[sim_num].append(list(map(float, lines[i].strip().split())))
+
+    z_min = 0
+    z_max = 0
+    for key in lines_dic.keys():
+        z_min = min(lines_dic[key][0][0], z_min)
+        z_max = max(lines_dic[key][len(lines_dic[key]) - 1][0], z_max)
+
+    bins = np.linspace(z_min, z_max, int(z_max - z_min) + 1)
+    table = np.zeros((len(lines_dic) + 1, len(bins) + 1))
+
+    sim_nums = list(lines_dic.keys())
+    for i in range(0, len(sim_nums)):
+        table[i + 1][0] = sim_nums[i]
+        for pair in lines_dic[sim_nums[i]]:
+            index = int(pair[0] - z_min)
+            table[i + 1][index + 1] = pair[1]
+
+    for i in range(0, len(bins)):
+        table[0][i + 1] = bins[i]
+
+    header_str = "simN " + " ".join(list(map(str, bins)))
+
+    output_path = path.splitext(file_path)[0] + "_parsed" + path.splitext(file_path)[1]
+    write_header(header_str, output_path)
+    append_table(output_path, table.T)
+
+
+def clusters_parse(file_path):
+    clusters = np.loadtxt(file_path, skiprows=1)
+    clusters = clusters[:, :3]
+
+    clusters_dic = {}
+    for cluster in clusters:
+        cluster_str = "Si" + str(int(cluster[1])) + "C" + str(int(cluster[2]))
+        if not cluster_str in clusters_dic.keys():
+            clusters_dic[cluster_str] = {}
+
+        sim_num = int(cluster[0])
+        if not cluster[0] in clusters_dic[cluster_str]:
+            clusters_dic[cluster_str][sim_num] = 0
+
+        clusters_dic[cluster_str][sim_num] += 1
+
+    # total_sims = len(np.unique(clusters[:, 0]))
+    total_sims = 50
+    total_clusters = len(clusters_dic.keys())
+
+    table = np.zeros((total_sims, total_clusters + 1))
+    cluster_index = 0
+    for key in clusters_dic.keys():
+        for sim_num in clusters_dic[key].keys():
+            table[sim_num - 1][cluster_index + 1] = clusters_dic[key][sim_num]
+            table[sim_num - 1, 0] = sim_num
+        cluster_index += 1
+
+    header_str = "simN\t" + "\t".join(clusters_dic.keys())
+    output_path = path.splitext(file_path)[0] + "_parsed" + path.splitext(file_path)[1]
+
+    write_header(header_str, output_path)
+    append_table(output_path, table, type="d")
+
+
+def clusters_parse_sum(file_path):
+    clusters = np.loadtxt(file_path, skiprows=1)
+    clusters = clusters[:, :3]
+
+    clusters_dic = {}
+    for cluster in clusters:
+        sim_num = int(cluster[0])
+        if not sim_num in clusters_dic.keys():
+            clusters_dic[sim_num] = {}
+            clusters_dic[sim_num]["Si"] = 0
+            clusters_dic[sim_num]["C"] = 0
+        clusters_dic[sim_num]["Si"] += cluster[1]
+        clusters_dic[sim_num]["C"] += cluster[2]
+
+    total_sims = len(clusters_dic.keys())
+    table = np.zeros((total_sims, 3))
+
+    keys = list(clusters_dic.keys())
+    for i in range(0, len(keys)):
+        sim_num = keys[i]
+        table[i][0] = keys[i]
+        table[i][1] = clusters_dic[sim_num]["Si"]
+        table[i][2] = clusters_dic[sim_num]["C"]
+
+    header_str = "simN Si C"
+    output_path = (
+        path.splitext(file_path)[0] + "_parsed_sum" + path.splitext(file_path)[1]
+    )
+
+    write_header(header_str, output_path)
+    append_table(output_path, table, type="d")
+
+
+def clusters_parse_angle_dist(file_path):
+    clusters = np.loadtxt(file_path, skiprows=1)
+
+    clusters_simNum_N = clusters[:, :2]
+    clusters_simNum_N[:, 1] = clusters[:, 1] + clusters[:, 2]
+
+    clusters_enrg_ang = clusters[:, -2:]
+    clusters_enrg_ang[:, 0] /= clusters_simNum_N[:, 1]
+
+    num_bins = (85 - 5) // 10 + 1
+    num_sims = 50 + 1
+
+    number_table = np.zeros((num_bins, num_sims))
+    energy_table = np.zeros((num_bins, num_sims))
+
+    number_table[:, 0] = np.linspace(5, 85, 9)
+    energy_table[:, 0] = np.linspace(5, 85, 9)
+
+    for i in range(0, len(clusters)):
+        angle_index = int(np.floor(clusters_enrg_ang[i, 1])) // 10
+        sim_index = int(clusters_simNum_N[i, 0])
+
+        if angle_index >= num_bins:
+            continue
+
+        number_table[angle_index, sim_index] += clusters_simNum_N[i, 1]
+        energy_table[angle_index, sim_index] += clusters_enrg_ang[i, 1]
+
+    header_str_number = "angle N1 N2 N3 ... N50"
+    output_path_number = (
+        path.splitext(file_path)[0]
+        + "_parsed_number_dist"
+        + path.splitext(file_path)[1]
+    )
+    write_table(output_path_number, number_table, header_str_number)
+
+    header_str_energy = "angle E1 E2 E3 ... E50"
+    output_path_energy = (
+        path.splitext(file_path)[0]
+        + "_parsed_energy_dist"
+        + path.splitext(file_path)[1]
+    )
+    write_table(output_path_energy, energy_table, header_str_energy)
 
 
 class LAMMPS(lammps.lammps):
@@ -152,15 +308,14 @@ id type xs ys zs"
         mask, cluster_ids = self.get_clusters_mask(atom_x, atom_cluster)
 
         clusters_table = self.get_clusters_table(cluster_ids)
-        self.append_table(self.clusters_table, clusters_table)
+        append_table(self.clusters_table, clusters_table)
         rim_info = self.get_rim_info(atom_id[~mask & (atom_cluster != 0)])
-        self.append_table(self.rim_table, rim_info)
+        append_table(self.rim_table, rim_info)
 
         carbon_hist = self.get_carbon_hist(atom_x, atom_type, mask)
-        self.append_table(self.carbon_dist, carbon_hist, header=str(self.sim_num))
+        append_table(self.carbon_dist, carbon_hist, header=str(self.sim_num))
         carbon_info = self.get_carbon_info(atom_id[~mask & (atom_type == 2)])
-        self.append_table(self.carbon_table, carbon_info)
-        self.carbon_dist_parse()
+        append_table(self.carbon_table, carbon_info)
 
         self.lmp_stop()
         self.lmp_start()
@@ -179,7 +334,7 @@ id x     y z vx vy vz type c_clusters"
         clusters = self.lmp.get_atom_vector_compute("clusters")
         clusters = clusters[clusters != 0]
         crater_info = self.get_crater_info(clusters)
-        self.append_table(self.crater_table, crater_info)
+        append_table(self.crater_table, crater_info)
 
         self.lmp.close()
 
@@ -510,47 +665,6 @@ id x y z vx vy vz type c_clusters c_atom_ke
         print("delta:", delta)
         print("new zer_lvl:", self.zero_lvl)
 
-    def carbon_dist_parse(self):
-        file_path = self.carbon_dist
-
-        with open(file_path, "r") as f:
-            lines = f.readlines()
-
-        lines_dic = {}
-        for i in range(1, len(lines)):
-            if lines[i][0] == "#":
-                sim_num = int(lines[i].strip().split()[1])
-                lines_dic[sim_num] = []
-            else:
-                lines_dic[sim_num].append(list(map(float, lines[i].strip().split())))
-
-        z_min = 0
-        z_max = 0
-        for key in lines_dic.keys():
-            z_min = min(lines_dic[key][0][0], z_min)
-            z_max = max(lines_dic[key][len(lines_dic[key]) - 1][0], z_max)
-
-        bins = np.linspace(z_min, z_max, int(z_max - z_min) + 1)
-        table = np.zeros((len(lines_dic) + 1, len(bins) + 1))
-
-        sim_nums = list(lines_dic.keys())
-        for i in range(0, len(sim_nums)):
-            table[i + 1][0] = sim_nums[i]
-            for pair in lines_dic[sim_nums[i]]:
-                index = int(pair[0] - z_min)
-                table[i + 1][index + 1] = pair[1]
-
-        for i in range(0, len(bins)):
-            table[0][i + 1] = bins[i]
-
-        header_str = "simN " + " ".join(list(map(str, bins)))
-
-        output_path = (
-            path.splitext(file_path)[0] + "_parsed" + path.splitext(file_path)[1]
-        )
-        # write_header(header_str, output_path)
-        append_table(output_path, table.T)
-
 
 def main():
     energy = 8_000
@@ -595,6 +709,10 @@ def main():
         try:
             simulation.set_fu_vars(fu_energy=energy, fu_x=x, fu_y=y, fu_z=15)
             simulation.run()
+            clusters_parse(simulation.clusters_table)
+            clusters_parse_sum(simulation.clusters_table)
+            clusters_parse_angle_dist(simulation.clusters_table)
+            carbon_dist_parse(simulation.carbon_dist)
         except lammps.MPIAbortException:
             pass
         except Exception as e:
