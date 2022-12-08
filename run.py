@@ -10,19 +10,14 @@ def write_header(header_str, table_path):
         f.write("# " + header_str + "\n")
 
 
-def append_table(filename, table, header="", type="f", precision=5):
+def save_table(filename, table, header="", type="f", precision=5, mode='w'):
     if type == "d":
         fmt_str = "%d"
     elif type == "f":
         fmt_str = f"%.{precision}f"
 
-    with open(filename, "ab") as file:
+    with open(filename, f"{mode}b") as file:
         np.savetxt(file, table, delimiter="\t", fmt=fmt_str, header=header)
-
-
-def write_table(filename, table, header, type="f", precision=5):
-    write_header(header, filename)
-    append_table(filename, table, type=type, precision=precision)
 
 
 def carbon_dist_parse(file_path):
@@ -59,8 +54,7 @@ def carbon_dist_parse(file_path):
     header_str = "simN " + " ".join(list(map(str, bins)))
 
     output_path = path.splitext(file_path)[0] + "_parsed" + path.splitext(file_path)[1]
-    write_header(header_str, output_path)
-    append_table(output_path, table.T)
+    save_table(output_path, table.T, header_str)
 
 
 def clusters_parse(file_path):
@@ -93,9 +87,7 @@ def clusters_parse(file_path):
 
     header_str = "simN\t" + "\t".join(clusters_dic.keys())
     output_path = path.splitext(file_path)[0] + "_parsed" + path.splitext(file_path)[1]
-
-    write_header(header_str, output_path)
-    append_table(output_path, table, type="d")
+    save_table(output_path, table, header_str, type="d")
 
 
 def clusters_parse_sum(file_path):
@@ -127,8 +119,7 @@ def clusters_parse_sum(file_path):
         path.splitext(file_path)[0] + "_parsed_sum" + path.splitext(file_path)[1]
     )
 
-    write_header(header_str, output_path)
-    append_table(output_path, table, type="d")
+    save_table(output_path, table, header_str, type="d")
 
 
 def clusters_parse_angle_dist(file_path):
@@ -165,7 +156,7 @@ def clusters_parse_angle_dist(file_path):
         + "_parsed_number_dist"
         + path.splitext(file_path)[1]
     )
-    write_table(output_path_number, number_table, header_str_number)
+    save_table(output_path_number, number_table, header_str_number)
 
     header_str_energy = "angle E1 E2 E3 ... E50"
     output_path_energy = (
@@ -173,7 +164,7 @@ def clusters_parse_angle_dist(file_path):
         + "_parsed_energy_dist"
         + path.splitext(file_path)[1]
     )
-    write_table(output_path_energy, energy_table, header_str_energy)
+    save_table(output_path_energy, energy_table, header_str_energy)
 
 
 class LAMMPS(lammps.lammps):
@@ -308,14 +299,14 @@ id type xs ys zs"
         mask, cluster_ids = self.get_clusters_mask(atom_x, atom_cluster)
 
         clusters_table = self.get_clusters_table(cluster_ids)
-        append_table(self.clusters_table, clusters_table)
+        save_table(self.clusters_table, clusters_table, mode='a')
         rim_info = self.get_rim_info(atom_id[~mask & (atom_cluster != 0)])
-        append_table(self.rim_table, rim_info)
+        save_table(self.rim_table, rim_info, mode='a')
 
         carbon_hist = self.get_carbon_hist(atom_x, atom_type, mask)
-        append_table(self.carbon_dist, carbon_hist, header=str(self.sim_num))
+        save_table(self.carbon_dist, carbon_hist, header=str(self.sim_num), mode='a')
         carbon_info = self.get_carbon_info(atom_id[~mask & (atom_type == 2)])
-        append_table(self.carbon_table, carbon_info)
+        save_table(self.carbon_table, carbon_info, mode='a')
 
         self.lmp_stop()
         self.lmp_start()
@@ -334,7 +325,7 @@ id x     y z vx vy vz type c_clusters"
         clusters = self.lmp.get_atom_vector_compute("clusters")
         clusters = clusters[clusters != 0]
         crater_info = self.get_crater_info(clusters)
-        append_table(self.crater_table, crater_info)
+        save_table(self.crater_table, crater_info, mode='a')
 
         self.lmp.close()
 
@@ -668,7 +659,8 @@ id x y z vx vy vz type c_clusters c_atom_ke
 
 def main():
     energy = 8_000
-    run_time = int(energy * (5 / 4))
+    #run_time = int(energy * (5 / 4))
+    run_time=200
 
     # 0K    -  83.19
     # 300K  -  82.4535
@@ -700,7 +692,7 @@ def main():
     def rand_coord():
         return simulation.si_lattice * (np.random.rand() * 2 - 1)
 
-    for i in range(1):
+    for i in range(3):
         simulation.set_sim_num(i + 1)
 
         x = rand_coord()
