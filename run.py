@@ -386,10 +386,10 @@ mol m_C60 1 units box
     def potentials(self):
         self.lmp.commands_string(
             """
-pair_style  hybrid airebo/omp 3.0 tersoff/zbl/omp
-pair_coeff  * * tersoff/zbl/omp SiC.tersoff.zbl Si C
+pair_style  hybrid airebo 3.0 tersoff/zbl
+pair_coeff  * * tersoff/zbl SiC.tersoff.zbl Si C
 pair_coeff  2 2 none
-pair_coeff  * * airebo/omp CH.airebo NULL C
+pair_coeff  * * airebo CH.airebo NULL C
 neighbor    3.0 bin
 """
         )
@@ -443,7 +443,7 @@ c_sputter_all c_sputter_c c_sputter_si
     def fixes(self):
         self.lmp.commands_string(
             f"""
-fix f_1 nve nve/omp
+fix f_1 nve nve
 fix f_2 thermostat temp/berendsen {self.temperature} {self.temperature} 0.001
 fix f_3 all electron/stopping 10.0 ./elstop-table.txt region si_all
 fix f_4 all dt/reset 1 0.0005 0.001 0.1
