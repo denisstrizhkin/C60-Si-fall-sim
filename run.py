@@ -212,6 +212,9 @@ class SIMULATION:
     def lmp_start(self):
         self.lmp = LAMMPS()
         self.lmp.command(f"package omp {self.num_threads}")
+        self.lmp.command('suffix omp')
+        #self.lmp.command('gpu 0 device_type nvidiagpu')
+        #self.lmp.command('suffix gpu')
 
     def lmp_stop(self):
         self.lmp.close()
