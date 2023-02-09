@@ -1,6 +1,7 @@
 #!/bin/python3
 
 from os import path
+#from mpi4py import MPI
 import lammps
 import numpy as np
 
@@ -105,7 +106,7 @@ def clusters_parse_sum(file_path):
         clusters_dic[sim_num]["C"] += cluster[2]
 
     total_sims = len(clusters_dic.keys())
-    table = np.zeros((total_sims, 3))
+    table = np.zeros((total_sims, 4))
 
     keys = list(clusters_dic.keys())
     for i in range(0, len(keys)):
@@ -113,6 +114,7 @@ def clusters_parse_sum(file_path):
         table[i][0] = keys[i]
         table[i][1] = clusters_dic[sim_num]["Si"]
         table[i][2] = clusters_dic[sim_num]["C"]
+        table[i][3] = table[i][1] + table[i][2]
 
     header_str = "simN Si C"
     output_path = (
@@ -663,7 +665,7 @@ id x y z vx vy vz type c_clusters c_atom_ke
 def main():
     energy = 8_000
     #run_time = int(energy * (5 / 4))
-    run_time=200
+    run_time=1000
 
     # 0K    -  83.19
     # 300K  -  82.4535
@@ -685,7 +687,7 @@ def main():
         input_file_path = path.join(input_file_root, "fall1000.input.data")
 
     simulation = SIMULATION(
-        temperature=temperature, zero_lvl=zero_lvl, run_time=run_time, num_threads=8
+        temperature=temperature, zero_lvl=zero_lvl, run_time=run_time, num_threads=4
     )
     simulation.set_si_vars(si_bottom=-16, si_top=15.3, si_width=12, si_lattice=5.43)
 
@@ -695,7 +697,7 @@ def main():
     def rand_coord():
         return simulation.si_lattice * (np.random.rand() * 2 - 1)
 
-    for i in range(3):
+    for i in range(1):
         simulation.set_sim_num(i + 1)
 
         x = rand_coord()
@@ -715,6 +717,7 @@ def main():
             pass
 
     print("*** FINISHED COMPLETELY ***")
+    #MPI.Finalize()
 
 
 if __name__ == "__main__":
