@@ -1,0 +1,5 @@
+reset_timestep 0
+timestep ${step}
+thermo 25
+thermo_style custom step pe ke etotal temp c_vacancies dt time &
+    c_sputter_all c_sputter_c c_sputter_si

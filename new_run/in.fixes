@@ -1,0 +1,4 @@
+fix nve nve nve
+fix tbath thermostat temp/berendsen ${temperature} ${temperature} 0.001
+fix estop all electron/stopping 10.0 ./elstop-table.txt
+fix dt all dt/reset 1 $(v_step/10) ${step} 0.1

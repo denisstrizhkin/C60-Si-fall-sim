@@ -1,0 +1,7 @@
+group C60 type 2
+group Si type 1
+group Si_fixed region Si_fixed
+group nve subtract all Si_fixed
+group thermostat dynamic Si region bath
+group not_outside region not_outside
+group outside subtract Si not_outside
