@@ -1,0 +1,3 @@
+pair_style tersoff/zbl
+pair_coeff * * SiC.tersoff.zbl Si C
+neighbor 3.0 bin
