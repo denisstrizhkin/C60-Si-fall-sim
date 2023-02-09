@@ -84,7 +84,7 @@ def main():
         new_var('Si_top', SI_TOP)
 
         lmp.command(f'molecule C60 {INPUT_DIR / "mol.C60"}')
-        lmp.command(f'1 single C60_x C60_y C60_z mol C60 1 units box')
+        lmp.command('create_atoms 1 single ${C60_x} ${C60_y} ${C60_z} mol C60 1 units box')
 
         lmp.file(str(SCRIPT_DIR / 'in.regions'))
 
