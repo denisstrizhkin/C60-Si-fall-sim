@@ -388,11 +388,9 @@ mol m_C60 1 units box
     def potentials(self):
         self.lmp.commands_string(
             """
-pair_style  hybrid airebo 3.0 tersoff/zbl
-pair_coeff  * * tersoff/zbl SiC.tersoff.zbl Si C
-pair_coeff  2 2 none
-pair_coeff  * * airebo CH.airebo NULL C
-neighbor    3.0 bin
+pair_style tersoff/zbl
+pair_coeff * * SiC.tersoff.zbl Si C
+neighbor 3.0 bin
 """
         )
 
