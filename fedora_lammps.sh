@@ -78,6 +78,7 @@ build_options=(
     BUILD_SHARED_LIBS
     LAMMPS_EXCEPTIONS
     PKG_PYTHON
+    PKG_GPU
 )
 
 cmake_flags=''
