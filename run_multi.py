@@ -793,13 +793,13 @@ def main():
     simulation.set_results_dir(str(results_dir))
 
     def rand_coord():
-        return simulation.si_lattice * (np.random.rand() * 2 - 1)
+        return simulation.si_lattice * (np.random.rand() * 2 - 1) * 2
 
     for i in range(args.runs):
         simulation.set_sim_num(i + 1)
 
         x = rand_coord()
-        y = rand_coord()
+        y = rand_coord() + simulation.si_lattice * simulation.si_width
 
         try:
             simulation.set_fu_vars(fu_energy=energy, fu_x=x, fu_y=y, fu_z=15)
