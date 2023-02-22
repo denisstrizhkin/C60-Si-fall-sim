@@ -1,9 +1,11 @@
 #!/bin/python3
 
 from os import path
-#from mpi4py import MPI
 import lammps
 import numpy as np
+import argparse
+from pathlib import Path
+import os
 
 
 def write_header(header_str, table_path):
@@ -11,10 +13,12 @@ def write_header(header_str, table_path):
         f.write("# " + header_str + "\n")
 
 
-def save_table(filename, table, header="", type="f", precision=5, mode='w'):
-    if type == "d":
+def save_table(filename, table, header="", dtype="f", precision=5, mode='w'):
+    fmt_str = ''
+
+    if dtype == "d":
         fmt_str = "%d"
-    elif type == "f":
+    elif dtype == "f":
         fmt_str = f"%.{precision}f"
 
     with open(filename, f"{mode}b") as file:
@@ -27,6 +31,7 @@ def carbon_dist_parse(file_path):
 
     lines_dic = {}
     for i in range(1, len(lines)):
+        sim_num = None
         if lines[i][0] == "#":
             sim_num = int(lines[i].strip().split()[1])
             lines_dic[sim_num] = []
@@ -65,7 +70,7 @@ def clusters_parse(file_path):
     clusters_dic = {}
     for cluster in clusters:
         cluster_str = "Si" + str(int(cluster[1])) + "C" + str(int(cluster[2]))
-        if not cluster_str in clusters_dic.keys():
+        if cluster_str not in clusters_dic.keys():
             clusters_dic[cluster_str] = {}
 
         sim_num = int(cluster[0])
@@ -88,7 +93,7 @@ def clusters_parse(file_path):
 
     header_str = "simN\t" + "\t".join(clusters_dic.keys())
     output_path = path.splitext(file_path)[0] + "_parsed" + path.splitext(file_path)[1]
-    save_table(output_path, table, header_str, type="d")
+    save_table(output_path, table, header_str, dtype="d")
 
 
 def clusters_parse_sum(file_path):
@@ -98,7 +103,7 @@ def clusters_parse_sum(file_path):
     clusters_dic = {}
     for cluster in clusters:
         sim_num = int(cluster[0])
-        if not sim_num in clusters_dic.keys():
+        if sim_num not in clusters_dic.keys():
             clusters_dic[sim_num] = {}
             clusters_dic[sim_num]["Si"] = 0
             clusters_dic[sim_num]["C"] = 0
@@ -118,20 +123,20 @@ def clusters_parse_sum(file_path):
 
     header_str = "simN Si C"
     output_path = (
-        path.splitext(file_path)[0] + "_parsed_sum" + path.splitext(file_path)[1]
+            path.splitext(file_path)[0] + "_parsed_sum" + path.splitext(file_path)[1]
     )
 
-    save_table(output_path, table, header_str, type="d")
+    save_table(output_path, table, header_str, dtype="d")
 
 
 def clusters_parse_angle_dist(file_path):
     clusters = np.loadtxt(file_path, skiprows=1)
 
-    clusters_simNum_N = clusters[:, :2]
-    clusters_simNum_N[:, 1] = clusters[:, 1] + clusters[:, 2]
+    clusters_sim_num_n = clusters[:, :2]
+    clusters_sim_num_n[:, 1] = clusters[:, 1] + clusters[:, 2]
 
     clusters_enrg_ang = clusters[:, -2:]
-    clusters_enrg_ang[:, 0] /= clusters_simNum_N[:, 1]
+    clusters_enrg_ang[:, 0] /= clusters_sim_num_n[:, 1]
 
     num_bins = (85 - 5) // 10 + 1
     num_sims = 50 + 1
@@ -144,27 +149,27 @@ def clusters_parse_angle_dist(file_path):
 
     for i in range(0, len(clusters)):
         angle_index = int(np.floor(clusters_enrg_ang[i, 1])) // 10
-        sim_index = int(clusters_simNum_N[i, 0])
+        sim_index = int(clusters_sim_num_n[i, 0])
 
         if angle_index >= num_bins:
             continue
 
-        number_table[angle_index, sim_index] += clusters_simNum_N[i, 1]
+        number_table[angle_index, sim_index] += clusters_sim_num_n[i, 1]
         energy_table[angle_index, sim_index] += clusters_enrg_ang[i, 1]
 
     header_str_number = "angle N1 N2 N3 ... N50"
     output_path_number = (
-        path.splitext(file_path)[0]
-        + "_parsed_number_dist"
-        + path.splitext(file_path)[1]
+            path.splitext(file_path)[0]
+            + "_parsed_number_dist"
+            + path.splitext(file_path)[1]
     )
     save_table(output_path_number, number_table, header_str_number)
 
     header_str_energy = "angle E1 E2 E3 ... E50"
     output_path_energy = (
-        path.splitext(file_path)[0]
-        + "_parsed_energy_dist"
-        + path.splitext(file_path)[1]
+            path.splitext(file_path)[0]
+            + "_parsed_energy_dist"
+            + path.splitext(file_path)[1]
     )
     save_table(output_path_energy, energy_table, header_str_energy)
 
@@ -204,6 +209,17 @@ class LAMMPS(lammps.lammps):
 
 class SIMULATION:
     def __init__(self, temperature, zero_lvl, run_time, num_threads=1):
+        self.vacancies_restart_file = None
+        self.fu_speed = None
+        self.fu_z_coord = None
+        self.fu_y_coord = None
+        self.fu_x_coord = None
+        self.si_fixed = None
+        self.si_width = None
+        self.si_top = None
+        self.si_bottom = None
+        self.si_lattice = None
+
         self.lmp = None
         self.num_threads = num_threads
 
@@ -211,12 +227,26 @@ class SIMULATION:
         self.zero_lvl = zero_lvl
         self.run_time = run_time
 
+        self.input_file_path = ''
+        self.sim_num = 0
+
+        self.results_dir = './results'
+
+        self.clusters_table = []
+        self.carbon_table = []
+        self.rim_table = []
+        self.crater_table = []
+        self.carbon_dist = []
+
     def lmp_start(self):
         self.lmp = LAMMPS()
-        self.lmp.command(f"package omp {self.num_threads}")
-        self.lmp.command('suffix omp')
-        #self.lmp.command('gpu 0 device_type nvidiagpu')
-        #self.lmp.command('suffix gpu')
+
+        if self.num_threads > 0:
+            self.lmp.command(f"package omp {self.num_threads}")
+            self.lmp.command('suffix omp')
+        else:
+            self.lmp.command('gpu 0 device_type nvidiagpu')
+            self.lmp.command('suffix gpu')
 
     def lmp_stop(self):
         self.lmp.close()
@@ -230,10 +260,6 @@ class SIMULATION:
 
     def set_results_dir(self, results_dir_path):
         self.results_dir = results_dir_path
-
-        def write_header(header_str, table_path):
-            with open(table_path, "w", encoding="utf-8") as f:
-                f.write("# " + header_str + "\n")
 
         def results_dir_join(file_path):
             return path.join(self.results_dir, file_path)
@@ -357,14 +383,14 @@ region fixed block {-self.si_width} {self.si_width} {-self.si_width} {self.si_wi
 {self.si_fixed} units lattice
 
 region floor   block {-self.si_width}  {self.si_width}    {-self.si_width}  {self.si_width}    {self.si_fixed} \
-{self.si_fixed+1}
-region x_left  block {-self.si_width}  {-self.si_width+1} {-self.si_width}  {self.si_width}    {self.si_fixed} \
+{self.si_fixed + 1}
+region x_left  block {-self.si_width}  {-self.si_width + 1} {-self.si_width}  {self.si_width}    {self.si_fixed} \
 {self.si_top}
-region x_right block {self.si_width-1} {self.si_width}    {-self.si_width}  {self.si_width}    {self.si_fixed} \
+region x_right block {self.si_width - 1} {self.si_width}    {-self.si_width}  {self.si_width}    {self.si_fixed} \
 {self.si_top}
-region y_left  block {-self.si_width}  {self.si_width}    {-self.si_width}  {-self.si_width+1} {self.si_fixed} \
+region y_left  block {-self.si_width}  {self.si_width}    {-self.si_width}  {-self.si_width + 1} {self.si_fixed} \
 {self.si_top}
-region y_right block {-self.si_width}  {self.si_width}    {self.si_width-1} {self.si_width}    {self.si_fixed} \
+region y_right block {-self.si_width}  {self.si_width}    {self.si_width - 1} {self.si_width}    {self.si_fixed} \
 {self.si_top}
 
 region bath union 5 floor x_right x_left y_right y_left
@@ -372,14 +398,14 @@ region bath union 5 floor x_right x_left y_right y_left
 region clusters block {-self.si_width} {self.si_width} {-self.si_width} {self.si_width} 0 INF units lattice
 
 region not_outside block {-self.si_width + 2} {self.si_width - 2} {-self.si_width + 2} \
-    {self.si_width - 2} {self.si_bottom} {self.si_top+2} units lattice
+    {self.si_width - 2} {self.si_bottom} {self.si_top + 2} units lattice
 """
         )
 
     def add_fu(self):
         self.lmp.commands_string(
             f"""
-molecule m_C60 ./mol.txt
+molecule m_C60 ./input_files/mol.C60
 create_atoms 1 single {self.fu_x_coord} {self.fu_y_coord} {self.fu_z_coord} \
 mol m_C60 1 units box
 """
@@ -584,11 +610,11 @@ id x y z vx vy vz type c_clusters c_atom_ke
         self.lmp.command("compute crater_z_mean vac reduce sum z")
         self.lmp.command("compute crater_z_min vac reduce min z")
         crater_z_min = (
-            self.lmp.get_global_scalar_compute("crater_z_min") - self.zero_lvl
+                self.lmp.get_global_scalar_compute("crater_z_min") - self.zero_lvl
         )
         crater_z_mean = (
-            self.lmp.get_global_scalar_compute("crater_z_mean") / crater_count
-            - self.zero_lvl
+                self.lmp.get_global_scalar_compute("crater_z_mean") / crater_count
+                - self.zero_lvl
         )
 
         return np.array(
@@ -607,8 +633,8 @@ id x y z vx vy vz type c_clusters c_atom_ke
     def get_carbon_hist(self, atom_x, atom_type, mask):
         mask = (atom_type == 2) & ~mask
         z_coords = np.around(atom_x[mask][:, 2] - self.zero_lvl, 1)
-        right = int(np.ceil(z_coords.max()))
-        left = int(np.floor(z_coords.min()))
+        right = int(np.ceil(z_coords.max(initial=float('-inf'))))
+        left = int(np.floor(z_coords.min(initial=float('+inf'))))
         hist, bins = np.histogram(z_coords, bins=(right - left), range=(left, right))
         length = len(hist)
         hist = np.concatenate(
@@ -644,7 +670,7 @@ id x y z vx vy vz type c_clusters c_atom_ke
 
         self.lmp.command(
             f"region surface block {-self.si_width} {self.si_width} {-self.si_width} {self.si_width} \
-           {(max_outside_z - 1.35)/self.si_lattice} {max_outside_z/self.si_lattice} units lattice"
+           {(max_outside_z - 1.35) / self.si_lattice} {max_outside_z / self.si_lattice} units lattice"
         )
         self.lmp.command("group surface region surface")
         self.lmp.command("group outside_surface intersect surface outside")
@@ -660,15 +686,85 @@ id x y z vx vy vz type c_clusters c_atom_ke
         print("new zer_lvl:", self.zero_lvl)
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Run Si bombardment with C60 simulation."
+    )
+
+    parser.add_argument(
+        "--temperature",
+        action="store",
+        required=False,
+        default=700,
+        type=int,
+        help="Set temperature of the simulation. (K)",
+    )
+
+    parser.add_argument(
+        "--energy",
+        action="store",
+        required=False,
+        default=8,
+        type=int,
+        help="Set fall energy of the simulation. (keV)"
+    )
+
+    parser.add_argument(
+        "--runs",
+        action="store",
+        required=False,
+        default=2,
+        type=int,
+        help="Number of simulations to run."
+    )
+
+    parser.add_argument(
+        "--run-time",
+        action="store",
+        required=False,
+        default=None,
+        type=int,
+        help="Run simulation this amount of steps."
+    )
+
+    parser.add_argument(
+        "--omp-threads",
+        action="store",
+        required=False,
+        default=2,
+        type=int,
+        help="Set number of OpenMP threads. (if set to 0 use GPU)"
+    )
+
+    parser.add_argument(
+        "--results-dir",
+        action="store",
+        required=False,
+        default='./results',
+        type=str,
+        help="Set directory path where to store computational results.",
+    )
+
+    return parser.parse_args()
+
+
 def main():
-    energy = 8_000
-    #run_time = int(energy * (5 / 4))
-    run_time=1000
+    args = parse_args()
+    energy = args.energy * 1e3
+
+    run_time = args.run_time
+    if run_time is None:
+        if energy < 8_000:
+            run_time = 10_000
+        else:
+            run_time = int(energy * (5 / 4))
 
     # 0K    -  83.19
     # 300K  -  82.4535
     # 700K  -  83.391
-    temperature = 1000
+    temperature = args.temperature
+    zero_lvl = None
+    input_file_path = None
     input_file_root = "./input_files"
 
     if temperature == 0:
@@ -685,17 +781,21 @@ def main():
         input_file_path = path.join(input_file_root, "fall1000.input.data")
 
     simulation = SIMULATION(
-        temperature=temperature, zero_lvl=zero_lvl, run_time=run_time, num_threads=4
+        temperature=temperature, zero_lvl=zero_lvl, run_time=run_time, num_threads=args.omp_threads,
     )
     simulation.set_si_vars(si_bottom=-16, si_top=15.3, si_width=12, si_lattice=5.43)
 
     simulation.set_input_file(input_file_path)
-    simulation.set_results_dir("./results")
+
+    results_dir = Path(args.results_dir)
+    if not results_dir.exists():
+        os.mkdir(results_dir)
+    simulation.set_results_dir(str(results_dir))
 
     def rand_coord():
         return simulation.si_lattice * (np.random.rand() * 2 - 1)
 
-    for i in range(1):
+    for i in range(args.runs):
         simulation.set_sim_num(i + 1)
 
         x = rand_coord()
@@ -714,8 +814,8 @@ def main():
             print(e)
             pass
 
+    os.system(f'tar cvzf {results_dir}.tar.gz {results_dir}/*')
     print("*** FINISHED COMPLETELY ***")
-    #MPI.Finalize()
 
 
 if __name__ == "__main__":
