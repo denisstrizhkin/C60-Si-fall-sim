@@ -3,21 +3,24 @@
 # Stop script on error
 set -e
 
+is_dnf=0
+is_apt=0
+
 # Check if dnf is present
-if [ ! -z "$(which dnf)" ]; then
+if [ -n "$(which dnf)" ]; then
     is_dnf=1
 fi
 
 # Check if apt is present
-if [ ! -z "$(which apt)" ]; then
+if [ -n "$(which apt)" ]; then
     is_apt=1
 fi
 
 # Clone lammps repo
-SRC_DIR="$HOME"/Desktop/src/lammps
+SRC_DIR=/mnt/data/lammps/lammps_repo
 if [ ! -d "$SRC_DIR" ]; then
     mkdir -p "$SRC_DIR"
-    git clone -b release https://github.com/lammps/lammps.git "$SRC_DIR"
+    git clone -b develop https://github.com/lammps/lammps.git "$SRC_DIR"
     mkdir build
 fi
 cd "$SRC_DIR"
@@ -29,8 +32,10 @@ cd build
 
 # Install required dnf packages
 if [ "$is_dnf" -eq 1 ]; then
-    if [ -z "$(dnf list installed | grep "^rpmfusion-free")" ]; then
-        sudo dnf install https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm
+    if ! dnf list installed | grep -q "^rpmfusion-free"; then
+        sudo dnf install \
+        "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm" \
+        "https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm"
     fi
 
     packages=(
@@ -39,7 +44,6 @@ if [ "$is_dnf" -eq 1 ]; then
         libomp-devel
         openmpi-devel
         ffmpeg
-        voro++-devel
         python3-devel
     )
 
@@ -47,14 +51,13 @@ if [ "$is_dnf" -eq 1 ]; then
 fi
 
 # Install required apt packages
-if [ "$is_apt" -eq 1 ]; then
+if [ "$is_apt" -eq 1 ] && [ "$is_dnf" -eq 0 ]; then
     packages=(
         cmake
         clang
         libomp-dev
         libopenmpi-dev
         ffmpeg
-        voro++-dev
         python3-dev
         python3-venv
     )
@@ -87,10 +90,12 @@ do
     cmake_flags="$cmake_flags -D ${build_option}=yes"
 done
 
-cmake ../cmake
-cmake $cmake_flags .
+if lspci | grep -qE '(VGA|3D).*NVIDIA'; then
+  cmake_flags="$cmake_flags -D GPU_API=cuda -D GPU_ARCH=sm_80"
+fi
+
+cmake $cmake_flags ../cmake
 
 # Compile and install
-make -j$(nproc)
-make install
-make install-python
+cmake --build . -j "$(nproc)"
+cmake --install .
