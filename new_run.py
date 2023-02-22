@@ -40,6 +40,15 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--run-time",
+        action="store",
+        required=False,
+        default=None,
+        type=int,
+        help="Run simulation this amount of steps."
+    )
+
+    parser.add_argument(
         "--omp-threads",
         action="store",
         required=False,
@@ -67,7 +76,7 @@ SCRIPT_DIR = Path("./new_run")
 OMP_THREADS = ARGS.omp_threads
 MPI_CORES = ARGS.mpi_cores
 N_RUNS = ARGS.runs
-ENERGY = ARGS.energy
+ENERGY = ARGS.energy * 1e3
 TEMPERATURE = ARGS.temperature
 LATTICE = 5.43
 STEP = 1e-3
@@ -78,10 +87,16 @@ C60_Z = 20 + LATTICE * SI_TOP
 C60_VEL = -np.sqrt(ENERGY) * 5.174
 BOX_WIDTH = 12
 BOX_BOTTOM = -16
-RUN_TIME = 100
 IS_ALL_DUMP = True
 ALL_DUMP_INTERVAL = 20
 TMP = Path("/tmp")
+
+if ARGS.run_time is not None:
+    RUN_TIME = ARGS.run_time
+elif ENERGY < 8_000:
+    RUN_TIME = 10_000
+else:
+    RUN_TIME = ENERGY * (5 / 4)
 
 if TEMPERATURE == 0:
     ZERO_LVL = 83.19
@@ -107,14 +122,42 @@ def set_suffix(lmp):
 
 
 def new_var(lmp, name, value):
-    lmp.command(f"variable {name} delete")
+    del_var(lmp, name)
     lmp.command(f"variable {name} equal {value}")
 
 
+def del_var(lmp, name):
+    lmp.command(f"variable {name} delete")
+
+
+def del_comp(lmp, name):
+    lmp.command(f"uncompute {name}")
+
+
+def extract_ids_var(lmp, name, group):
+    ids = lmp.extract_variable(name, group, 1)
+    if len(ids) == 0:
+        return []
+    else:
+        return ids[np.nonzero(ids)].astype(int)
+
+
+def get_clusters_mask(atom_x, atom_cluster):
+    mask_1 = atom_cluster != 0
+    cluster_ids = set(np.unique(atom_cluster[mask_1]).flatten())
+
+    mask_2 = atom_x[:, 2] < (ZERO_LVL + 2.0)
+    no_cluster_ids = set(np.unique(atom_cluster[mask_2]).flatten())
+    cluster_ids = list(cluster_ids.difference(no_cluster_ids))
+
+    mask = np.isin(atom_cluster, cluster_ids)
+    return mask, np.asarray(cluster_ids).astype(int)
+
+
 def recalc_zero_lvl(lmp):
+    global ZERO_LVL
     lmp.command("variable outside_id atom id")
-    outside_id = lmp.extract_variable("outside_id", "outside", 1)
-    outside_id = outside_id[np.nonzero(outside_id)].astype(int)
+    outside_id = extract_ids_var(lmp, "outside_id", "outside")
     outside_z = lmp.gather_atoms("x", ids=outside_id)[:, 2]
     outside_z = np.sort(outside_z)[-20:]
     max_outside_z = outside_z.mean()
@@ -129,13 +172,70 @@ def recalc_zero_lvl(lmp):
     lmp.command("compute ave_outside_z outside_surface reduce ave z")
     ave_outside_z = lmp.extract_compute("ave_outside_z", 0, 0)
     delta = max_outside_z - ave_outside_z
-    zero_lvl = ave_outside_z + delta * 2
-    new_var(lmp, "zero_lvl", zero_lvl)
+    ZERO_LVL = ave_outside_z + delta * 2
+    new_var(lmp, "zero_lvl", ZERO_LVL)
 
     lmp.print(f"'max_outside_z {max_outside_z}'")
     lmp.print(f"'ave_outside_z: {ave_outside_z}'")
     lmp.print(f"'delta: {delta}'")
-    lmp.print(f"'new zer_lvl: {zero_lvl}'")
+    lmp.print(f"'new zer_lvl: {ZERO_LVL}'")
+
+
+def get_vacancies_group_cmd(lmp):
+    vac_ids = lmp.extract_variable("vacancy_id", "Si", 1)
+    vac_ids = vac_ids[vac_ids != 0]
+    return "group vac id " + " ".join(vac_ids.astype(int).astype(str))
+
+
+def get_clusters_table(lmp, cluster_ids, sim_num):
+    table = np.array([])
+
+    for cluster_id in cluster_ids:
+        var = f"is_cluster_{cluster_id}"
+        group = f"cluster_{cluster_id}"
+        lmp.command(f'variable {var} atom "c_clusters=={cluster_id}"')
+        lmp.command(f"group {group} variable {var}")
+        lmp.command(f"compute {cluster_id}_c C60 reduce sum v_{var}")
+        lmp.command(f"compute {cluster_id}_si Si reduce sum v_{var}")
+        lmp.command(f"compute {cluster_id}_mom {group} momentum")
+        lmp.command(f"variable {cluster_id}_mass equal mass({group})")
+        lmp.command(f'fix print all print 1 "c_{cluster_id}_mom[1] c_{cluster_id}_c c_{cluster_id}_si"')
+        lmp.run(0)
+
+        comp_c = lmp.extract_compute(f"{cluster_id}_c", 0, 0)
+        comp_si = lmp.extract_compute(f"{cluster_id}_si", 0, 0)
+        lmp.print(f"$(c_{cluster_id}_mom[1])")
+        comp_mom = lmp.extract_compute(f"{cluster_id}_mom", 0, 1)
+        var_mass = lmp.extract_variable(f"{cluster_id}_mass", None, 0)
+
+        var_ek = 2 * 5.1875 * 1e-5 * (comp_mom[0] ** 2 + comp_mom[1] ** 2 + comp_mom[2] ** 2) / (2 * var_mass)
+        var_angle = np.atan(comp_mom[2] / np.sqrt(comp_mom[0] ** 2 + comp_mom[1] ** 2))
+        var_angle = 90 - var_angle * 180 / np.pi,
+
+        table = np.concatenate(
+            (table, np.array([sim_num, comp_si, comp_c, var_mass, *comp_mom, var_ek, var_angle]))
+        )
+
+        del_var(lmp, var)
+        del_var(lmp, f"{cluster_id}_mass")
+        del_comp(lmp, f"{cluster_id}_c")
+        del_comp(lmp, f"{cluster_id}_si")
+        del_comp(lmp, f"{cluster_id}_mom")
+        lmp.command(f"group {group} delete")
+
+    return table.reshape((table.shape[0] // 9, 9))
+
+
+def save_table(filename, table, header="", dtype="f", precision=5, mode='w'):
+    fmt_str = ""
+
+    if dtype == "d":
+        fmt_str = "%d"
+    elif dtype == "f":
+        fmt_str = f"%.{precision}f"
+
+    with open(filename, f"{mode}b") as file:
+        np.savetxt(file, table, delimiter="\t", fmt=fmt_str, header=header)
 
 
 def main():
@@ -204,18 +304,17 @@ def main():
         lmp.command(f'dump final all custom 1 {run_dir / "final.dump"} id x y z vx vy vz type c_clusters c_atom_ke')
         lmp.run(0)
 
+        vacs_group_cmd = get_vacancies_group_cmd(lmp)
+        atom_cluster = lmp.extract_compute("clusters", 1, 1)
+        atom_id = lmp.gather_atoms("id")
+        atom_x = lmp.gather_atoms("x")
+        atom_type = lmp.gather_atoms("type")
+        mask, cluster_ids = get_clusters_mask(atom_x, atom_cluster)
+
+        clusters_table = get_clusters_table(lmp, cluster_ids, run_num)
+        save_table(OUT_DIR, clusters_table, mode='a')
+        print("test")
         """
-        vac_ids = self.lmp.get_atom_variable("vacancy_id", "si_all")
-        vac_ids = vac_ids[vac_ids != 0]
-        vac_group_command = "group vac id " + " ".join(vac_ids.astype(int).astype(str))
-
-        atom_cluster = self.lmp.get_atom_vector_compute("clusters")
-        atom_x = self.lmp.numpy.extract_atom("x")
-        atom_id = self.lmp.numpy.extract_atom("id")
-        atom_type = self.lmp.numpy.extract_atom("type")
-        mask, cluster_ids = self.get_clusters_mask(atom_x, atom_cluster)
-
-        clusters_table = self.get_clusters_table(cluster_ids)
         save_table(self.clusters_table, clusters_table, mode='a')
         rim_info = self.get_rim_info(atom_id[~mask & (atom_cluster != 0)])
         save_table(self.rim_table, rim_info, mode='a')
