@@ -245,7 +245,7 @@ class SIMULATION:
             self.lmp.command(f"package omp {self.num_threads}")
             self.lmp.command('suffix omp')
         else:
-            self.lmp.command('gpu 0 device_type nvidiagpu')
+            self.lmp.command('package gpu 0 device_type nvidiagpu')
             self.lmp.command('suffix gpu')
 
     def lmp_stop(self):
