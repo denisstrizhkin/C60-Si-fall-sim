@@ -745,6 +745,15 @@ def parse_args():
         help="Set directory path where to store computational results.",
     )
 
+    parser.add_argument(
+        "--input-file",
+        action="store",
+        required=False,
+        default=None,
+        type=str,
+        help="Set input file.",
+    )
+
     return parser.parse_args()
 
 
@@ -779,6 +788,9 @@ def main():
     elif temperature == 1000:
         zero_lvl = 84.0147
         input_file_path = path.join(input_file_root, "fall1000.input.data")
+
+    if args.input_file is not None:
+        input_file_path = args.input_file
 
     simulation = SIMULATION(
         temperature=temperature, zero_lvl=zero_lvl, run_time=run_time, num_threads=args.omp_threads,
