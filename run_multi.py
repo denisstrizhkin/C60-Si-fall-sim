@@ -307,8 +307,8 @@ class SIMULATION:
         self.fixes()
 
         self.lmp.command(
-            f"dump 1 all custom 2000 {self.results_dir}/norm_{self.sim_num}.dump \
-id type xs ys zs"
+            f"dump 1 all custom 100 {self.results_dir}/norm_{self.sim_num}.dump \
+id type x y z c_atom_ke"
         )
         self.lmp.command(
             f"velocity fu set NULL NULL {-self.fu_speed} sum yes units box"
