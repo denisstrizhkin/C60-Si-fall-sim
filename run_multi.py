@@ -317,7 +317,7 @@ id type x y z c_atom_ke"
 
         self.recalc_zero_lvl()
         self.clusters()
-        self.lmp.run(1)
+        self.lmp.run(0)
 
         vac_ids = self.lmp.get_atom_variable("vacancy_id", "si_all")
         vac_ids = vac_ids[vac_ids != 0]
@@ -329,7 +329,7 @@ id type x y z c_atom_ke"
         atom_type = self.lmp.numpy.extract_atom("type")
         mask, cluster_ids = self.get_clusters_mask(atom_x, atom_cluster)
 
-        clusters_table = self.get_clusters_table(cluster_ids)
+        clusters_table = self.get_clusters_table(cluster_ids).astype(float)
         save_table(self.clusters_table, clusters_table, mode='a')
         rim_info = self.get_rim_info(atom_id[~mask & (atom_cluster != 0)])
         save_table(self.rim_table, rim_info, mode='a')
@@ -338,6 +338,15 @@ id type x y z c_atom_ke"
         save_table(self.carbon_dist, carbon_hist, header=str(self.sim_num), mode='a')
         carbon_info = self.get_carbon_info(atom_id[~mask & (atom_type == 2)])
         save_table(self.carbon_table, carbon_info, mode='a')
+
+        if len(cluster_ids) != 0:
+            cluster_group_command = "group cluster id " + " ".join(
+                atom_id[np.where(np.in1d(atom_cluster, cluster_ids))].astype(int).astype(str)
+            )
+            self.lmp.command(cluster_group_command)
+            self.lmp.command("delete_atoms group cluster")
+        self.lmp.command("write_data tmp.input.data")
+        self.input_file_path = './tmp.input.data'
 
         self.lmp_stop()
         self.lmp_start()
@@ -351,7 +360,7 @@ id type x y z c_atom_ke"
             f"dump clusters vac custom 20 {self.results_dir}/crater_{self.sim_num}.dump \
 id x     y z vx vy vz type c_clusters"
         )
-        self.lmp.command("run 1")
+        self.lmp.run(0)
 
         clusters = self.lmp.get_atom_vector_compute("clusters")
         clusters = clusters[clusters != 0]
@@ -472,7 +481,7 @@ c_sputter_all c_sputter_c c_sputter_si
 fix f_1 nve nve
 fix f_2 thermostat temp/berendsen {self.temperature} {self.temperature} 0.001
 fix f_3 all electron/stopping 10.0 ./elstop-table.txt region si_all
-fix f_4 all dt/reset 1 0.0005 0.001 0.1
+fix f_4 all dt/reset 1 0.0001 0.001 0.1
 """
         )
 
@@ -495,6 +504,7 @@ id x y z vx vy vz type c_clusters c_atom_ke
 
     def get_clusters_table(self, cluster_ids):
         table = np.array([])
+
         for cluster_id in cluster_ids:
             var = f"is_cluster_{cluster_id}"
             group = f"cluster_{cluster_id}"
@@ -502,49 +512,31 @@ id x y z vx vy vz type c_clusters c_atom_ke
             self.lmp.command(f"group {group} variable {var}")
             self.lmp.command(f"compute {cluster_id}_c fu reduce sum v_{var}")
             self.lmp.command(f"compute {cluster_id}_si si_all reduce sum v_{var}")
-            smom = f"{cluster_id}_mom"
-            self.lmp.command(f"compute {smom} {group} momentum")
-            self.lmp.command(f"compute {cluster_id}_mass {group} reduce sum c_mass")
-            self.lmp.command(
-                f'variable {cluster_id}_ek equal "(c_{smom}[1]^2+\
-               c_{smom}[2]^2+c_{smom}[3]^2)/(2*c_{cluster_id}_mass)"'
-            )
-            self.lmp.command(
-                f'variable {cluster_id}_angle equal "atan(c_{smom}[3]/\
-               sqrt(c_{smom}[1]^2+c_{smom}[2]^2))"'
-            )
+            self.lmp.command(f"compute {cluster_id}_mom {group} momentum")
+            self.lmp.command(f"variable {cluster_id}_mass equal mass({group})")
+            self.lmp.command(f'fix print all print 1 "c_{cluster_id}_mom[1] c_{cluster_id}_c c_{cluster_id}_si"')
 
             comp_c = self.lmp.get_global_scalar_compute(f"{cluster_id}_c")
             comp_si = self.lmp.get_global_scalar_compute(f"{cluster_id}_si")
             comp_mom = self.lmp.get_global_vector_compute(f"{cluster_id}_mom")
-            comp_mass = self.lmp.get_global_scalar_compute(f"{cluster_id}_mass")
-            var_ek = self.lmp.get_equal_variable(f"{cluster_id}_ek")
-            var_angle = self.lmp.get_equal_variable(f"{cluster_id}_angle")
+            var_mass = self.lmp.get_equal_variable(f"{cluster_id}_mass")
+
+            var_ek = 2 * 5.1875 * 1e-5 * (comp_mom[0] ** 2 + comp_mom[1] ** 2 + comp_mom[2] ** 2) / (2 * var_mass)
+            var_angle = np.arctan(comp_mom[2] / np.sqrt(comp_mom[0] ** 2 + comp_mom[1] ** 2))
+            var_angle = 90 - var_angle * 180 / np.pi
+
             table = np.concatenate(
-                (
-                    table,
-                    np.array(
-                        [
-                            self.sim_num,
-                            comp_si,
-                            comp_c,
-                            comp_mass,
-                            *comp_mom,
-                            2 * 5.1875 * 1e-5 * var_ek,
-                            90 - var_angle * 180 / np.pi,
-                        ]
-                    ),
-                )
+                (table, np.array([self.sim_num, comp_si, comp_c, var_mass, *comp_mom, var_ek, var_angle]),)
             )
 
+            self.lmp.command(f'variable {var} delete')
+            self.lmp.command(f"variable {cluster_id}_mass delete")
             self.lmp.command(f"uncompute {cluster_id}_c")
             self.lmp.command(f"uncompute {cluster_id}_si")
-            self.lmp.command(f"uncompute {cluster_id}_mass")
-            self.lmp.command(f"uncompute {smom}")
+            self.lmp.command(f"uncompute {cluster_id}_mom")
             self.lmp.command(f"group {group} delete")
 
-        table = table.reshape((table.shape[0] // 9, 9))
-        return table
+        return table.reshape((table.shape[0] // 9, 9))
 
     def get_clusters_mask(self, atom_x, atom_cluster):
         mask_1 = atom_cluster != 0
@@ -805,26 +797,21 @@ def main():
     simulation.set_results_dir(str(results_dir))
 
     def rand_coord():
-        return simulation.si_lattice * (np.random.rand() * 2 - 1) * 2
+        return simulation.si_lattice * (np.random.rand() * 2 - 1) * 6
 
     for i in range(args.runs):
         simulation.set_sim_num(i + 1)
 
         x = rand_coord()
-        y = rand_coord() + simulation.si_lattice * simulation.si_width
+        y = rand_coord()
 
-        try:
-            simulation.set_fu_vars(fu_energy=energy, fu_x=x, fu_y=y, fu_z=15)
-            simulation.run()
-            clusters_parse(simulation.clusters_table)
-            clusters_parse_sum(simulation.clusters_table)
-            clusters_parse_angle_dist(simulation.clusters_table)
-            carbon_dist_parse(simulation.carbon_dist)
-        except lammps.MPIAbortException:
-            pass
-        except Exception as e:
-            print(e)
-            pass
+        simulation.set_fu_vars(fu_energy=energy, fu_x=x, fu_y=y, fu_z=50)
+        simulation.run()
+
+    clusters_parse(simulation.clusters_table)
+    clusters_parse_sum(simulation.clusters_table)
+    clusters_parse_angle_dist(simulation.clusters_table)
+    carbon_dist_parse(simulation.carbon_dist)
 
     os.system(f'tar cvzf {results_dir}.tar.gz {results_dir}/*')
     print("*** FINISHED COMPLETELY ***")
