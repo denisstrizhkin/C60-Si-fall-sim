@@ -314,7 +314,7 @@ id type x y z c_atom_ke"
             f"velocity fu set NULL NULL {-self.fu_speed} sum yes units box"
         )
 
-        while self.lmp.get_thermo(time) < self.run_time:
+        while self.lmp.get_thermo('time') < self.run_time:
             self.lmp.run(200)
 
         self.recalc_zero_lvl()
@@ -470,7 +470,7 @@ compute  sputter_c    fu     reduce sum v_is_sputtered
         self.lmp.commands_string(
             """
 reset_timestep 0
-timestep       0.001
+timestep       0.0005
 thermo         10
 thermo_style   custom step pe ke etotal temp c_vacancies dt time \
 c_sputter_all c_sputter_c c_sputter_si
@@ -483,7 +483,7 @@ c_sputter_all c_sputter_c c_sputter_si
 fix f_1 nve nve
 fix f_2 thermostat temp/berendsen {self.temperature} {self.temperature} 0.001
 fix f_3 all electron/stopping 10.0 ./elstop-table.txt region si_all
-fix f_4 all dt/reset 1 0.0001 0.01 0.1
+fix f_4 all dt/reset 5 0.0001 0.05 0.1
 """
         )
 
