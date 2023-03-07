@@ -314,7 +314,7 @@ id type x y z c_atom_ke"
             f"velocity fu set NULL NULL {-self.fu_speed} sum yes units box"
         )
 
-        while lmp.get_thermo(time) < self.run_time:
+        while self.lmp.get_thermo(time) < self.run_time:
             self.lmp.run(200)
 
         self.recalc_zero_lvl()
