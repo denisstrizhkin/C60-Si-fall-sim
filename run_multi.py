@@ -317,6 +317,10 @@ id type x y z c_atom_ke"
         while self.lmp.get_thermo('time') < self.run_time:
             self.lmp.run(200)
 
+            if self.lmp.get_thermo('time') > 5:
+                self.lmp.command('unfix f_4')
+                self.lmp.command('fix f_4 all dt/reset 10 0.001 0.01 0.1')
+
         self.recalc_zero_lvl()
         self.clusters()
         self.lmp.run(0)
@@ -470,7 +474,7 @@ compute  sputter_c    fu     reduce sum v_is_sputtered
         self.lmp.commands_string(
             """
 reset_timestep 0
-timestep       0.0005
+timestep       0.0001
 thermo         10
 thermo_style   custom step pe ke etotal temp c_vacancies dt time \
 c_sputter_all c_sputter_c c_sputter_si
@@ -483,7 +487,7 @@ c_sputter_all c_sputter_c c_sputter_si
 fix f_1 nve nve
 fix f_2 thermostat temp/berendsen {self.temperature} {self.temperature} 0.001
 fix f_3 all electron/stopping 10.0 ./elstop-table.txt region si_all
-fix f_4 all dt/reset 5 0.0001 0.05 0.1
+fix f_4 all dt/reset 1 0.0001 0.001 0.1
 """
         )
 
