@@ -720,8 +720,8 @@ def parse_args():
         action="store",
         required=False,
         default=None,
-        type=int,
-        help="Run simulation this amount of steps."
+        type=float,
+        help="Run simulation for this amount of time. (ps)"
     )
 
     parser.add_argument(
