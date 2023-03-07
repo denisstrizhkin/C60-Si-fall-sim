@@ -313,7 +313,9 @@ id type x y z c_atom_ke"
         self.lmp.command(
             f"velocity fu set NULL NULL {-self.fu_speed} sum yes units box"
         )
-        self.lmp.run(self.run_time)
+
+        while lmp.get_thermo(time) < self.run_time:
+            self.lmp.run(200)
 
         self.recalc_zero_lvl()
         self.clusters()
@@ -481,7 +483,7 @@ c_sputter_all c_sputter_c c_sputter_si
 fix f_1 nve nve
 fix f_2 thermostat temp/berendsen {self.temperature} {self.temperature} 0.001
 fix f_3 all electron/stopping 10.0 ./elstop-table.txt region si_all
-fix f_4 all dt/reset 1 0.0001 0.001 0.1
+fix f_4 all dt/reset 1 0.0001 0.01 0.1
 """
         )
 
@@ -550,6 +552,9 @@ id x y z vx vy vz type c_clusters c_atom_ke
         return mask, np.asarray(cluster_ids).astype(int)
 
     def get_rim_info(self, group_ids):
+        if len(group_ids) == 0:
+            return np.array([])
+
         self.lmp.command(
             "group g_rim id " + " ".join(group_ids.astype(int).astype(str))
         )
@@ -797,7 +802,7 @@ def main():
     simulation.set_results_dir(str(results_dir))
 
     def rand_coord():
-        return simulation.si_lattice * (np.random.rand() * 2 - 1) * 6
+        return simulation.si_lattice * (np.random.rand() * 2 - 1) * 10
 
     for i in range(args.runs):
         simulation.set_sim_num(i + 1)
