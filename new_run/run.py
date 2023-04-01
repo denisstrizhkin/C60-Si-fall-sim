@@ -7,6 +7,11 @@ import argparse
 import os
 
 
+class Dump:
+    def __init__(self, dump_path: Path):
+        self.dump_path = dump_path
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Run Si bombardment with C60 simulation."
@@ -65,6 +70,24 @@ def parse_args():
         type=int,
         help="Set number of MPI cores."
     )
+    
+    parser.add_argument(
+        "--results-dir",
+        action="store",
+        required=False,
+        default='./results',
+        type=str,
+        help="Set directory path where to store computational results.",
+    )
+
+    parser.add_argument(
+        "--input-file",
+        action="store",
+        required=False,
+        default=None,
+        type=str,
+        help="Set input file.",
+    )
 
     return parser.parse_args()
 
@@ -119,19 +142,6 @@ def set_suffix(lmp):
     else:
         lmp.command(f"package omp {OMP_THREADS}")
         lmp.command("suffix omp")
-
-
-def new_var(lmp, name, value):
-    del_var(lmp, name)
-    lmp.command(f"variable {name} equal {value}")
-
-
-def del_var(lmp, name):
-    lmp.command(f"variable {name} delete")
-
-
-def del_comp(lmp, name):
-    lmp.command(f"uncompute {name}")
 
 
 def extract_ids_var(lmp, name, group):

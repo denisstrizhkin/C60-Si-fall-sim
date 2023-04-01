@@ -11,7 +11,7 @@ mpirun -np 10 lmp \
   \
   -var lattice 5.43 \
   \
-  -var Si_top 82.78 \
+  -var Si_top 83 \
   \
   -var C60_x 0 \
   -var C60_y 0 \
