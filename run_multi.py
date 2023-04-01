@@ -314,12 +314,14 @@ id type x y z c_atom_ke"
             f"velocity fu set NULL NULL {-self.fu_speed} sum yes units box"
         )
 
+        self.lmp.command("fix temp_time all print 10 \"$(time) $(temp)\" "
+            + f"file {self.results_dir}/temp_time.txt screen no"
+        )
+        self.lmp.command("fix penrg_time all print 10 \"$(pe) $(temp)\" "
+            + f"file {self.results_dir}/penrg_time.txt screen no"
+        )
         while self.lmp.get_thermo('time') < self.run_time:
             self.lmp.run(200)
-
-            if self.lmp.get_thermo('time') > 5:
-                self.lmp.command('unfix f_4')
-                self.lmp.command('fix f_4 all dt/reset 10 0.001 0.01 0.1')
 
         self.recalc_zero_lvl()
         self.clusters()
@@ -345,6 +347,8 @@ id type x y z c_atom_ke"
         carbon_info = self.get_carbon_info(atom_id[~mask & (atom_type == 2)])
         save_table(self.carbon_table, carbon_info, mode='a')
 
+        self.lmp.run(0)
+        self.lmp.command("unfix print_cluster")
         if len(cluster_ids) != 0:
             cluster_group_command = "group cluster id " + " ".join(
                 atom_id[np.where(np.in1d(atom_cluster, cluster_ids))].astype(int).astype(str)
@@ -520,7 +524,7 @@ id x y z vx vy vz type c_clusters c_atom_ke
             self.lmp.command(f"compute {cluster_id}_si si_all reduce sum v_{var}")
             self.lmp.command(f"compute {cluster_id}_mom {group} momentum")
             self.lmp.command(f"variable {cluster_id}_mass equal mass({group})")
-            self.lmp.command(f'fix print all print 1 "c_{cluster_id}_mom[1] c_{cluster_id}_c c_{cluster_id}_si"')
+            self.lmp.command(f'fix print_cluster all print 1 "c_{cluster_id}_mom[1] c_{cluster_id}_c c_{cluster_id}_si"')
 
             comp_c = self.lmp.get_global_scalar_compute(f"{cluster_id}_c")
             comp_si = self.lmp.get_global_scalar_compute(f"{cluster_id}_si")
@@ -779,7 +783,7 @@ def main():
 
     if temperature == 0:
         zero_lvl = 83.19
-        input_file_path = path.join(input_file_root, "fall.input.data")
+        input_file_path = path.join(input_file_root, "fall0.input.data")
     elif temperature == 300:
         zero_lvl = 82.4535
         input_file_path = path.join(input_file_root, "fall300.input.data")

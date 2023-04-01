@@ -1,0 +1,71 @@
+### init ###
+units metal
+dimension 3
+boundary p p m
+atom_style atomic
+atom_modify map yes
+
+read_data ${input_file}
+
+
+### variables ###
+variable bath_floor_top equal 'zlo + 1.5 * v_lattice'
+variable Si_fixed_top equal 'zlo + 0.5 * v_lattice'
+variable C60_z equal 'v_C60_z_offset + v_Si_top'
+
+
+### regions ###
+lattice diamond ${lattice} orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
+
+region Si_fixed block EDGE EDGE EDGE EDGE EDGE ${Si_fixed_top} units box
+
+region floor   block EDGE       EDGE       EDGE       EDGE       ${Si_fixed_top} ${bath_floor_top} units box
+region x_left  block EDGE       $(xlo + 1) EDGE       EDGE       ${Si_fixed_top} ${Si_top}         units box
+region x_right block $(xhi - 1) EDGE       EDGE       EDGE       ${Si_fixed_top} ${Si_top}         units box
+region y_left  block EDGE       EDGE       EDGE       $(ylo + 1) ${Si_fixed_top} ${Si_top}         units box
+region y_right block EDGE       EDGE       $(yhi - 1) EDGE       ${Si_fixed_top} ${Si_top}         units box
+
+region bath union 5 floor x_right x_left y_right y_left
+
+region C60_box block EDGE EDGE EDGE EDGE $(v_C60_z - 10) EDGE units box
+
+region clusters block EDGE EDGE EDGE EDGE 0 INF units box
+
+region not_outside block $(xlo + 2) $(xhi - 2) $(ylo + 2) $(yhi - 2) EDGE $(v_Si_top + 2) units box
+
+
+### potentials ###
+pair_style tersoff/zbl
+pair_coeff * * SiC.tersoff.zbl Si C
+neighbor 3.0 bin
+
+
+### C60 molecule ###
+molecule C60 ${mol_file}
+create_atoms 1 single ${C60_x} ${C60_y} ${C60_z} mol C60 1 units box
+group C60 region C60_box
+
+
+### groups ###
+group C type 2
+group Si type 1
+
+group Si_fixed region Si_fixed
+group nve subtract all Si_fixed
+group thermostat dynamic Si region bath
+
+group not_outside region not_outside
+group outside subtract Si not_outside
+
+
+### computes ###
+
+
+### thermo ###
+
+
+### fixes ###
+
+dump during all custom 1 dump.during id type x y z
+
+run 0
