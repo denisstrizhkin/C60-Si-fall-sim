@@ -5,11 +5,32 @@ import numpy as np
 from pathlib import Path
 import argparse
 import os
+import tempfile
 
 
 class Dump:
-    def __init__(self, dump_path: Path):
-        self.dump_path = dump_path
+    def __init__(self, dump_path: Path, dump_str: str):
+        self.data = np.loadtxt(dump_path, skiprows=9)
+        self.keys = dump_str.split()
+
+        if len(set(self.keys)) != len(self.keys):
+            raise ValueError('dump keys must be unique')
+
+    def __getitem__(self, key: str):
+        if key not in self.keys:
+            raise ValueError(f'no such key: {key}')
+
+        return self.data[:, self.keys.index(key)]
+   
+
+class ClusterAtom:
+    def __init__(self, z, vx, vy, vz, mass, type):
+        self.z = z
+        self.vx = vx
+        self.vy = vy
+        self.vz = vz
+        self.mass = mass
+        self.type = type
 
 
 def parse_args():
@@ -83,8 +104,7 @@ def parse_args():
     parser.add_argument(
         "--input-file",
         action="store",
-        required=False,
-        default=None,
+        required=True,
         type=str,
         help="Set input file.",
     )
@@ -93,26 +113,35 @@ def parse_args():
 
 
 ARGS = parse_args()
-OUT_DIR = Path("./results")
-INPUT_DIR = Path("./input_files")
-SCRIPT_DIR = Path("./new_run")
+
+OUT_DIR = Path(ARGS.results_dir)
+
+INPUT_FILE = Path(ARGS.input_file)
+INPUT_DIR = INPUT_FILE.parent
+MOL_FILE = INPUT_DIR / 'mol.C60'
+ELSTOP_TABLE = INPUT_DIR / 'elstop-table.txt'
+
+SCRIPT_DIR = Path("./")
+
 OMP_THREADS = ARGS.omp_threads
 MPI_CORES = ARGS.mpi_cores
+
 N_RUNS = ARGS.runs
-ENERGY = ARGS.energy * 1e3
+ENERGY = ARGS.energy
 TEMPERATURE = ARGS.temperature
+
 LATTICE = 5.43
 STEP = 1e-3
 SI_TOP = 15.3
+
 C60_X = 0
 C60_Y = 0
-C60_Z = 20 + LATTICE * SI_TOP
-C60_VEL = -np.sqrt(ENERGY) * 5.174
-BOX_WIDTH = 12
-BOX_BOTTOM = -16
+C60_Z_OFFSET = 30
+
 IS_ALL_DUMP = True
 ALL_DUMP_INTERVAL = 20
-TMP = Path("/tmp")
+
+TMP = Path(tempfile.gettempdir())
 
 if ARGS.run_time is not None:
     RUN_TIME = ARGS.run_time
@@ -123,16 +152,12 @@ else:
 
 if TEMPERATURE == 0:
     ZERO_LVL = 83.19
-    INPUT_FILE = INPUT_DIR / "fall.input.data"
 elif TEMPERATURE == 300:
     ZERO_LVL = 82.4535
-    INPUT_FILE = INPUT_DIR / "fall300.input.data"
 elif TEMPERATURE == 700:
     ZERO_LVL = 83.391
-    INPUT_FILE = INPUT_DIR / "fall700.input.data"
 elif TEMPERATURE == 1000:
     ZERO_LVL = 84.0147
-    INPUT_FILE = INPUT_DIR / "fall1000.input.data"
 
 
 def set_suffix(lmp):
@@ -152,38 +177,56 @@ def extract_ids_var(lmp, name, group):
         return ids[np.nonzero(ids)].astype(int)
 
 
-def get_clusters_mask(atom_x, atom_cluster):
-    mask_1 = atom_cluster != 0
-    cluster_ids = set(np.unique(atom_cluster[mask_1]).flatten())
+def get_cluster_dic(cluster_dump: Dump):
+    clusters = cluster_dump['c_clusters']
 
-    mask_2 = atom_x[:, 2] < (ZERO_LVL + 2.0)
-    no_cluster_ids = set(np.unique(atom_cluster[mask_2]).flatten())
-    cluster_ids = list(cluster_ids.difference(no_cluster_ids))
+    cluster_dic = dict()
+    for cluster_id in set(clusters):
+        cluster_dic[cluster_id] = []
+    
+    z = cluster_dump['z']
+    vx = cluster_dump['vx']
+    vy = cluster_dump['vy']
+    vz = cluster_dump['vz']
+    mass = cluster_dump['c_mass']
+    type = cluster_dump['type']
+   
+    for i in range(0, len(z)):
+        cluster = ClusterAtom(z = z[i], vx = vx[i], vy = vy[i], vz = vz[i], mass = mass[i], type = type[i])
+        cluster_dic[clusters[i]].append(cluster)
 
-    mask = np.isin(atom_cluster, cluster_ids)
-    return mask, np.asarray(cluster_ids).astype(int)
+    keys_to_delete = []
+    for key in cluster_dic.keys():
+        for cluster in cluster_dic[key]:
+            if cluster.z < (ZERO_LVL + 2.0):
+                keys_to_delete.append(key)
+                break;
+
+    for key in keys_to_delete:
+       cluster_dic.pop(key) 
+
+    return cluster_dic
 
 
 def recalc_zero_lvl(lmp):
     global ZERO_LVL
-    lmp.command("variable outside_id atom id")
+
+    lmp.variable('outside_id', 'atom', 'id')
     outside_id = extract_ids_var(lmp, "outside_id", "outside")
     outside_z = lmp.gather_atoms("x", ids=outside_id)[:, 2]
     outside_z = np.sort(outside_z)[-20:]
     max_outside_z = outside_z.mean()
 
-    lmp.command(
-        "region surface block -${box_width} ${box_width} -${box_width} ${box_width} " +
-        f"$({max_outside_z - 1.35} / v_Si_lattice) $({max_outside_z} / v_Si_lattice) units lattice"
-    )
-    lmp.command("group surface region surface")
-    lmp.command("group outside_surface intersect surface outside")
+    lmp.region('surface', 'block', 'EDGE', 'EDGE', 'EDGE', 'EDGE', max_outside_z - 1.35, max_outside_z, 'units', 'box')
+    lmp.group('surface', 'region', 'surface')
+    lmp.group('outside_surface', 'intersect', 'surface', 'outside')
 
-    lmp.command("compute ave_outside_z outside_surface reduce ave z")
+    lmp.compute('ave_outside_z', 'outside_surface', 'reduce', 'ave', 'z')
     ave_outside_z = lmp.extract_compute("ave_outside_z", 0, 0)
     delta = max_outside_z - ave_outside_z
     ZERO_LVL = ave_outside_z + delta * 2
-    new_var(lmp, "zero_lvl", ZERO_LVL)
+
+    lmp.variable('zero_lvl', 'index', ZERO_LVL)
 
     lmp.print(f"'max_outside_z {max_outside_z}'")
     lmp.print(f"'ave_outside_z: {ave_outside_z}'")
@@ -252,79 +295,63 @@ def main():
     if not OUT_DIR.exists():
         os.mkdir(OUT_DIR)
 
-    lmp = LammpsLibrary(cores=MPI_CORES)
-    lmp.command(f'log {OUT_DIR / "log.init"}')
-
-    set_suffix(lmp)
-
-    lmp.file(str(SCRIPT_DIR / "in.init"))
-    lmp.command(f"read_data {INPUT_FILE}")
-    lmp.command(f'write_restart {TMP / "restart.init"}')
-
-    for i in range(N_RUNS):
+    input_file = INPUT_FILE
+    for i in range(N_RUNS):    
+        lmp = LammpsLibrary(cores=MPI_CORES)
+        
         run_num = i + 1
         run_dir = OUT_DIR / f"run_{run_num}"
         if not run_dir.exists():
             os.mkdir(run_dir)
 
-        lmp.clear()
-        set_suffix(lmp)
-        lmp.command(f'read_restart {TMP / "restart.init"}')
         lmp.command(f'log {run_dir / "log.lammps"}')
-        lmp.command(
-            f"lattice diamond {LATTICE} orient x 1 0 0 orient y 0 1 0 orient z 0 0 1"
-        )
+        set_suffix(lmp)
 
         def rnd_coord(coord):
             return coord + (np.random.rand() - 0.5) * LATTICE
 
-        new_var(lmp, "step", STEP)
-        new_var(lmp, "C60_x", rnd_coord(C60_X))
-        new_var(lmp, "C60_y", rnd_coord(C60_Y))
-        new_var(lmp, "C60_z", C60_Z)
-        new_var(lmp, "C60_vel", C60_VEL)
-        new_var(lmp, "box_width", BOX_WIDTH)
-        new_var(lmp, "box_bottom", BOX_BOTTOM)
-        new_var(lmp, "Si_top", SI_TOP)
-        new_var(lmp, "temperature", TEMPERATURE)
-        new_var(lmp, "zero_lvl", ZERO_LVL)
-        new_var(lmp, "Si_lattice", LATTICE)
+        lmp.variable('input_file', 'index', f'"{input_file}"')
+        lmp.variable('mol_file', 'index', f'"{MOL_FILE}"')
+        lmp.variable('elstop_table', 'index', f'"{ELSTOP_TABLE}"')
+  
+        lmp.variable('lattice', 'index', LATTICE)
 
-        lmp.command(f'molecule C60 {INPUT_DIR / "mol.C60"}')
-        lmp.command(
-            "create_atoms 1 single ${C60_x} ${C60_y} ${C60_z} mol C60 1 units box"
-        )
+        lmp.variable('Si_top', 'index', 83)
 
-        lmp.file(str(SCRIPT_DIR / "in.regions"))
-        lmp.file(str(SCRIPT_DIR / "in.potentials"))
-        lmp.file(str(SCRIPT_DIR / "in.groups"))
-        lmp.file(str(SCRIPT_DIR / "in.computes"))
-        lmp.file(str(SCRIPT_DIR / "in.thermo"))
-        lmp.file(str(SCRIPT_DIR / "in.fixes"))
+        lmp.variable('C60_x', 'index', C60_X)
+        lmp.variable('C60_y', 'index', C60_Y)
+        lmp.variable('C60_z_offset', 'index', C60_Z_OFFSET)
 
-        lmp.command(f'dump all all custom {ALL_DUMP_INTERVAL} {run_dir / "all.dump"} id type x y z')
-        lmp.command('velocity C60 set NULL NULL ${C60_vel} sum yes units box')
+        lmp.variable('step', 'index', STEP)
+        lmp.variable('temperature', 'index', TEMPERATURE)
+        lmp.variable('fall_steps', 'index', RUN_TIME)
+        lmp.variable('energy', 'index', ENERGY)
 
-        lmp.run(RUN_TIME)
+        lmp.variable('zero_lvl', 'index', ZERO_LVL)
 
+        lmp.file(str(SCRIPT_DIR / "in.fall"))
         recalc_zero_lvl(lmp)
+
         lmp.file(str(SCRIPT_DIR / "in.clusters"))
-        lmp.command(
-            f'dump clusters clusters custom 1 {run_dir / "clusters.dump"} id x y z vx vy vz type c_clusters c_atom_ke')
-        lmp.command(f'dump final all custom 1 {run_dir / "final.dump"} id x y z vx vy vz type c_clusters c_atom_ke')
+
+        dump_cluster_path = run_dir / 'dump.clusters'
+        dump_cluster_str = 'id x y z vx vy vz type c_mass c_clusters c_atom_ke'
+
+        lmp.command(f'dump clusters clusters custom 1 {dump_cluster_path} {dump_cluster_str}')
+        lmp.command(f'dump final all custom 1 {run_dir / "dump.final"} id x y z vx vy vz type c_clusters c_atom_ke')
+        
         lmp.run(0)
+        lmp.undump('clusters')
+        lmp.undump('final')
 
-        vacs_group_cmd = get_vacancies_group_cmd(lmp)
-        atom_cluster = lmp.extract_compute("clusters", 1, 1)
-        atom_id = lmp.gather_atoms("id")
-        atom_x = lmp.gather_atoms("x")
-        atom_type = lmp.gather_atoms("type")
-        mask, cluster_ids = get_clusters_mask(atom_x, atom_cluster)
+        var_group_cmd = get_vacancies_group_cmd(lmp)
+        dump_cluster = Dump(dump_cluster_path, dump_cluster_str)
 
-        clusters_table = get_clusters_table(lmp, cluster_ids, run_num)
-        save_table(OUT_DIR, clusters_table, mode='a')
-        print("test")
+        cluster_dic = get_cluster_dic(dump_cluster)
+        print(cluster_dic)
+        exit()
         """
+        clusters_table = self.get_clusters_table(cluster_ids).astype(float)
         save_table(self.clusters_table, clusters_table, mode='a')
         rim_info = self.get_rim_info(atom_id[~mask & (atom_cluster != 0)])
         save_table(self.rim_table, rim_info, mode='a')
@@ -333,8 +360,38 @@ def main():
         save_table(self.carbon_dist, carbon_hist, header=str(self.sim_num), mode='a')
         carbon_info = self.get_carbon_info(atom_id[~mask & (atom_type == 2)])
         save_table(self.carbon_table, carbon_info, mode='a')
-        """
 
+        self.lmp.run(0)
+        self.lmp.command("unfix print_cluster")
+        if len(cluster_ids) != 0:
+            cluster_group_command = "group cluster id " + " ".join(
+                atom_id[np.where(np.in1d(atom_cluster, cluster_ids))].astype(int).astype(str)
+            )
+            self.lmp.command(cluster_group_command)
+            self.lmp.command("delete_atoms group cluster")
+        self.lmp.command("write_data tmp.input.data")
+        self.input_file_path = './tmp.input.data'
+
+        self.lmp_stop()
+        self.lmp_start()
+        self.lmp.command(f"read_restart {self.vacancies_restart_file}")
+        self.potentials()
+        self.lmp.command(vac_group_command)
+        self.lmp.command("group si_all type 1")
+        self.lmp.command("compute voro_vol si_all voronoi/atom only_group")
+        self.lmp.command("compute clusters vac cluster/atom 3")
+        self.lmp.command(
+            f"dump clusters vac custom 20 {self.results_dir}/crater_{self.sim_num}.dump \
+id x     y z vx vy vz type c_clusters"
+        )
+        self.lmp.run(0)
+
+        clusters = self.lmp.get_atom_vector_compute("clusters")
+        clusters = clusters[clusters != 0]
+        crater_info = self.get_crater_info(clusters)
+        save_table(self.crater_table, crater_info, mode='a')
+
+        self.lmp.close()"""
 
 if __name__ == "__main__":
     main()

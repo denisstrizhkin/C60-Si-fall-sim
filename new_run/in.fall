@@ -59,8 +59,6 @@ group outside subtract Si not_outside
 
 
 ### computes ###
-compute zero_lvl Si reduce max z
-variable zero_lvl equal "c_zero_lvl - 0.01"
 
 # compute ke per atom
 compute atom_ke all ke/atom
@@ -99,6 +97,3 @@ dump during all custom 100 dump.during id type x y z
 ### run simulation ###
 velocity C60 set NULL NULL ${C60_vel} sum yes units box
 run ${fall_steps}
-
-
-print "zero lvl: ${zero_lvl}"
