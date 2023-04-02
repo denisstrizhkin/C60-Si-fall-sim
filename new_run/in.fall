@@ -33,6 +33,8 @@ region clusters block EDGE EDGE EDGE EDGE 0 INF units box
 
 region not_outside block $(xlo + xlat * 2) $(xhi - xlat * 2) $(ylo + ylat * 2) $(yhi - ylat * 2) EDGE $(v_Si_top + zlat * 2) units box
 
+write_restart ${vacs_restart_file}
+
 
 ### potentials ###
 pair_style tersoff/zbl
