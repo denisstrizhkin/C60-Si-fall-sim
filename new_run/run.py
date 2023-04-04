@@ -12,7 +12,7 @@ from typing import List
 
 class Dump:
     def __init__(self, dump_path: Path, dump_str: str):
-        self.data = np.loadtxt(dump_path, skiprows=9)
+        self.data = np.loadtxt(dump_path, ndmin=2, skiprows=9)
         self.keys = dump_str.split()
 
         if len(set(self.keys)) != len(self.keys):
@@ -21,7 +21,7 @@ class Dump:
     def __getitem__(self, key: str):
         if key not in self.keys:
             raise ValueError(f'no such key: {key}')
-
+        
         return self.data[:, self.keys.index(key)]
    
 
@@ -450,13 +450,14 @@ def carbon_dist_parse(file_path):
         lines = f.readlines()
 
     lines_dic = {}
+    sim_num = -1
     for i in range(1, len(lines)):
-        sim_num = None
+        tokens = lines[i].strip().split()
         if lines[i][0] == "#":
-            sim_num = int(lines[i].strip().split()[1])
+            sim_num = int(tokens[1])
             lines_dic[sim_num] = []
         else:
-            lines_dic[sim_num].append(list(map(float, lines[i].strip().split())))
+            lines_dic[sim_num].append(list(map(float, tokens)))
 
     z_min = 0
     z_max = 0
@@ -484,14 +485,8 @@ def carbon_dist_parse(file_path):
 
 
 def clusters_parse(file_path):
-    clusters = np.loadtxt(file_path, skiprows=1)
-  
-    print(clusters.shape)
-    if clusters.shape[0] == 0:
-        clusters = clusters[:3]
-    else:
-        clusters = clusters[:, :3]
-
+    clusters = np.loadtxt(file_path, ndmin=2, skiprows=1)
+    clusters = clusters[:, :3]
 
     clusters_dic = {}
     for cluster in clusters:
@@ -523,12 +518,9 @@ def clusters_parse(file_path):
 
 
 def clusters_parse_sum(file_path):
-    clusters = np.loadtxt(file_path, skiprows=1)
+    clusters = np.loadtxt(file_path, ndmin=2, skiprows=1)
     
-    if clusters.shape[0] == 0:
-        clusters = clusters[:3]
-    else:
-        clusters = clusters[:, :3]
+    clusters = clusters[:, :3]
 
     clusters_dic = {}
     for cluster in clusters:
@@ -560,18 +552,12 @@ def clusters_parse_sum(file_path):
 
 
 def clusters_parse_angle_dist(file_path):
-    clusters = np.loadtxt(file_path, skiprows=1)
+    clusters = np.loadtxt(file_path, ndmin=2, skiprows=1)
 
-    if clusters.shape[0] == 0:
-        clusters_sim_num_n = clusters[:2]
-    else:
-        clusters_sim_num_n = clusters[:, :2]
+    clusters_sim_num_n = clusters[:, :2]
     clusters_sim_num_n[:, 1] = clusters[:, 1] + clusters[:, 2]
 
-    if clusters.shape[0] == 0:
-        clusters_enrg_ang = clusters[:-2]
-    else:
-        clusters_enrg_ang = clusters[:, :-2]
+    clusters_enrg_ang = clusters[:, :-2]
     clusters_enrg_ang[:, 0] /= clusters_sim_num_n[:, 1]
 
     num_bins = (85 - 5) // 10 + 1
@@ -624,7 +610,7 @@ def main():
         set_suffix(lmp)
 
         def rnd_coord(coord):
-            return coord + (np.random.rand() * 2 - 1) * LATTICE
+            return coord + (np.random.rand() * 2 - 1) * LATTICE * 10
 
         lmp.variable('input_file', 'index', f'"{input_file}"')
         lmp.variable('mol_file', 'index', f'"{MOL_FILE}"')
@@ -733,10 +719,10 @@ def main():
 
         lmp.close()
 
-    #clusters_parse(CLUSTERS_TABLE)
-    #clusters_parse_sum(CLUSTERS_TABLE)
-    #clusters_parse_angle_dist(CLUSTERS_TABLE)
-    #carbon_dist_parse(CARBON_DIST)
+    clusters_parse(CLUSTERS_TABLE)
+    clusters_parse_sum(CLUSTERS_TABLE)
+    clusters_parse_angle_dist(CLUSTERS_TABLE)
+    carbon_dist_parse(CARBON_DIST)
 
     os.system(f'tar cvzf {OUT_DIR}.tar.gz {OUT_DIR}/*')
     print("*** FINISHED COMPLETELY ***")

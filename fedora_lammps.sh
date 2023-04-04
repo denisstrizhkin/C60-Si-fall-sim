@@ -90,9 +90,10 @@ do
     cmake_flags="$cmake_flags -D ${build_option}=yes"
 done
 
-if lspci | grep -qE '(VGA|3D).*NVIDIA'; then
-  cmake_flags="$cmake_flags -D GPU_API=cuda -D GPU_ARCH=sm_80"
-fi
+#if lspci | grep -qE '(VGA|3D).*NVIDIA'; then
+#  cmake_flags="$cmake_flags -D GPU_API=cuda -D GPU_ARCH=sm_80"
+#fi
+cmake_flags="$cmake_flags -D GPU_API=opencl -D USE_STATIC_OPENCL_LOADER=no"
 
 cmake $cmake_flags ../cmake
 

@@ -39,8 +39,8 @@ write_restart ${vacs_restart_file}
 ### potentials ###
 pair_style tersoff/zbl
 pair_coeff * * SiC.tersoff.zbl Si C
-neighbor 3.0 bin
-
+neighbor 5.0 bin
+neigh_modify one 4000
 
 ### C60 molecule ###
 molecule C60 ${mol_file}
@@ -88,8 +88,8 @@ thermo_style custom step pe ke etotal temp c_vacancies dt time c_sputter_all c_s
 ### fixes ###
 fix nve nve nve
 fix tbath thermostat temp/berendsen ${temperature} ${temperature} 0.001
-fix estop all electron/stopping 10.0 ${elstop_table}
-fix dt all dt/reset 1 $(v_step/10) ${step} 0.1
+#fix estop all electron/stopping 10.0 ${elstop_table}
+#fix dt all dt/reset 1 $(v_step/10) ${step} 0.1
 
 
 ### dumps ###
