@@ -88,8 +88,8 @@ thermo_style custom step pe ke etotal temp c_vacancies dt time c_sputter_all c_s
 ### fixes ###
 fix nve nve nve
 fix tbath thermostat temp/berendsen ${temperature} ${temperature} 0.001
-#fix estop all electron/stopping 10.0 ${elstop_table}
-#fix dt all dt/reset 1 $(v_step/10) ${step} 0.1
+fix estop all electron/stopping 10.0 ${elstop_table}
+fix dt all dt/reset 1 $(v_step/10) ${step} 0.1
 
 
 ### dumps ###
@@ -98,4 +98,3 @@ dump during all custom 100 dump.during id type x y z
 
 ### run simulation ###
 velocity C60 set NULL NULL ${C60_vel} sum yes units box
-run ${fall_steps}

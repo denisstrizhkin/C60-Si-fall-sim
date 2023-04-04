@@ -21,7 +21,10 @@ class Dump:
     def __getitem__(self, key: str):
         if key not in self.keys:
             raise ValueError(f'no such key: {key}')
-        
+       
+        if len(self.data) == 0:
+            return []
+
         return self.data[:, self.keys.index(key)]
    
 
@@ -630,7 +633,6 @@ def main():
 
         lmp.variable('step', 'index', STEP)
         lmp.variable('temperature', 'index', TEMPERATURE)
-        lmp.variable('fall_steps', 'index', RUN_TIME)
         lmp.variable('energy', 'index', ENERGY)
 
         lmp.variable('zero_lvl', 'index', ZERO_LVL)
@@ -640,6 +642,13 @@ def main():
         recalc_zero_lvl(lmp)
 
         lmp.file(str(SCRIPT_DIR / "in.clusters"))
+        lmp.command(
+            f'fix temp_time all print 10 "$(time) $(temp)" file {OUT_DIR}/temp_time.txt screen no'
+        )
+        lmp.command(
+            f'fix penrg_time all print 10 "$(time) $(pe)" file {OUT_DIR}/penrg_time.txt screen no'
+        )
+        lmp.run(RUN_TIME)
 
         dump_cluster_path = run_dir / 'dump.clusters'
         dump_cluster_str = 'id x y z vx vy vz type c_mass c_clusters c_atom_ke'
@@ -680,7 +689,6 @@ def main():
         carbon_info = get_carbon_info(carbon, fu_x, fu_y, run_num)
         save_table(CARBON_TABLE, carbon_info, mode='a')
 
-        #lmp.run(0)
         if len(cluster_dic.keys()) != 0:
             ids_to_delete = []
             for key in cluster_dic_atoms.keys():
@@ -691,6 +699,14 @@ def main():
             cluster_group_command = "group cluster id " + " ".join(ids_to_delete.astype(int).astype(str))
             lmp.command(cluster_group_command)
             lmp.delete_atoms('group', 'cluster')
+
+        lmp.command("unfix tbath")
+        lmp.command("fix tbath nve temp/berendsen ${temperature} ${temperature} 0.001")
+        lmp.run(4000) 
+
+        lmp.command("unfix tbath")
+        lmp.command("fix tbath thermostat temp/berendsen ${temperature} ${temperature} 0.001")
+        lmp.run(1000)
 
         input_file = TMP / 'tmp.input.data'
         lmp.write_data(f'"{input_file}"')

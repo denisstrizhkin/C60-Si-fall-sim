@@ -6,9 +6,8 @@
   \
   --temperature 0 \
   --energy 2 \
-  --runs 1 \
-  --run-time 1000 \
+  --runs 10 \
+  --run-time 10000 \
   \
   --results-dir './res_test' \
-  --input-file '../input_files/fall0.input.data' \
-
+  --input-file '../input_files/fall0_2.input.data' \
