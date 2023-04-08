@@ -9,6 +9,9 @@ from os import path
 import tempfile
 from typing import List
 
+import matplotlib.pyplot as plt
+from matplotlib import cm
+
 
 class Dump:
     def __init__(self, dump_path: Path, dump_str: str):
@@ -366,6 +369,69 @@ def get_carbon(dump_final, carbon_sputtered):
     return carbon
 
 
+def calc_surface(data: Dump, run_dir: Path):
+    SQUARE = LATTICE / 2
+    
+    def get_linspace(left, right):
+        return np.linspace(left, right, round((right - left) / SQUARE) + 1)
+
+    coeff = 5
+    X = get_linspace(-LATTICE * coeff, LATTICE * coeff)
+    Y = get_linspace(-LATTICE * coeff, LATTICE * coeff)
+    Z = np.zeros((len(X), len(Y)))
+    print("calc_surface: - X:", X) 
+    print("calc_surface: - Y:", Y) 
+
+    for i in range(len(X) - 1):
+        for j in range(len(Y) - 1):
+            Z_vals = data['z'][np.where(
+                (data['x'] >= X[i]) &
+                (data['x'] < X[i + 1]) &
+                (data['y'] >= Y[j]) &
+                (data['y'] < Y[j + 1])
+            )]
+
+            if len(Z_vals) == 0:
+                Z[i, j] = np.nan
+            else:
+                Z[i, j] = Z_vals.max()
+
+            #print(Z[i,j])
+
+    print(f'calc_surface: - NaN: {np.count_nonzero(np.isnan(Z))}')
+    Z[np.where(np.isnan(Z))] = np.nanmean(Z)
+
+    n_X = Z.shape[0]
+    X = np.linspace(0, n_X - 1, n_X, dtype=int)
+
+    n_Y = Z.shape[1]
+    Y = np.linspace(0, n_Y - 1, n_Y, dtype=int)
+
+    def f_Z(i, j):
+        return Z[i,j]
+
+    z_all = Z.flatten()
+    z_all = np.sort(z_all[z_all != 0])
+    z_mean = z_all.mean()
+    print(f'calc_surface: - z_mean: {z_mean}')
+    z_deviation = abs(z_all - z_mean)**2.
+
+    z_data = np.zeros((len(z_all), 2))
+    z_data[:,0] = z_all[:]
+    z_data[:,1] = z_deviation[:]
+    #print(z_data)
+
+    Xs, Ys = np.meshgrid(X, Y)
+    Z = f_Z(Xs, Ys)
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.plot_surface(Xs, Ys, Z, cmap=cm.jet)
+    plt.savefig(f"{run_dir / 'surface.pdf'}")
+
+    return z_data
+
+
 def get_carbon_hist(carbon):
     z_coords = []
     for c in carbon:
@@ -613,7 +679,7 @@ def main():
         set_suffix(lmp)
 
         def rnd_coord(coord):
-            return coord + (np.random.rand() * 2 - 1) * LATTICE * 10
+            return coord + (np.random.rand() * 2 - 1) * LATTICE * 5
 
         lmp.variable('input_file', 'index', f'"{input_file}"')
         lmp.variable('mol_file', 'index', f'"{MOL_FILE}"')
@@ -643,12 +709,14 @@ def main():
 
         lmp.file(str(SCRIPT_DIR / "in.clusters"))
         lmp.command(
-            f'fix temp_time all print 10 "$(time) $(temp)" file {OUT_DIR}/temp_time.txt screen no'
+            f'fix temp_time all print 10 "$(time) $(temp)" file {run_dir}/temp_time.txt screen no'
         )
         lmp.command(
-            f'fix penrg_time all print 10 "$(time) $(pe)" file {OUT_DIR}/penrg_time.txt screen no'
+            f'fix penrg_time all print 10 "$(time) $(pe)" file {run_dir}/penrg_time.txt screen no'
         )
-        lmp.run(RUN_TIME)
+        lmp.run(1000)
+        lmp.unfix('estop')
+        lmp.run(RUN_TIME - 1000)
 
         dump_cluster_path = run_dir / 'dump.clusters'
         dump_cluster_str = 'id x y z vx vy vz type c_mass c_clusters c_atom_ke'
@@ -699,7 +767,16 @@ def main():
             cluster_group_command = "group cluster id " + " ".join(ids_to_delete.astype(int).astype(str))
             lmp.command(cluster_group_command)
             lmp.delete_atoms('group', 'cluster')
+        
+        dump_final_no_cluster_path = run_dir / 'dump.final_no_cluster'
+        lmp.command(f'dump final all custom 1 {dump_final_no_cluster_path} {dump_final_str}')
+        lmp.run(0)
+        lmp.undump('final')
 
+        dump_final_no_cluster = Dump(dump_final_no_cluster_path, dump_final_str)
+        surface_data = calc_surface(dump_final_no_cluster, run_dir)
+        save_table(run_dir / 'surface_table.txt', surface_data, mode='w')
+        
         lmp.command("unfix tbath")
         lmp.command("fix tbath nve temp/berendsen ${temperature} ${temperature} 0.001")
         lmp.run(4000) 
