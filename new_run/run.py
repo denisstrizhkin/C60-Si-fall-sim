@@ -707,7 +707,6 @@ def main():
         lmp.file(str(SCRIPT_DIR / "in.fall"))
         recalc_zero_lvl(lmp)
 
-        lmp.file(str(SCRIPT_DIR / "in.clusters"))
         lmp.command(
             f'fix temp_time all print 10 "$(time) $(temp)" file {run_dir}/temp_time.txt screen no'
         )
@@ -717,6 +716,7 @@ def main():
         lmp.run(1000)
         lmp.unfix('estop')
         lmp.run(RUN_TIME - 1000)
+        lmp.file(str(SCRIPT_DIR / "in.clusters"))
 
         dump_cluster_path = run_dir / 'dump.clusters'
         dump_cluster_str = 'id x y z vx vy vz type c_mass c_clusters c_atom_ke'
