@@ -39,7 +39,7 @@ write_restart ${vacs_restart_file}
 ### potentials ###
 pair_style tersoff/zbl
 pair_coeff * * SiC.tersoff.zbl Si C
-neighbor 5.0 bin
+neighbor 4.0 bin
 neigh_modify one 4000
 
 ### C60 molecule ###
