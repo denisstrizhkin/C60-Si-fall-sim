@@ -208,6 +208,7 @@ RIM_TABLE = OUT_DIR / "rim_table.txt"
 CARBON_TABLE = OUT_DIR / "carbon_table.txt"
 CRATER_TABLE = OUT_DIR / "crater_table.txt"
 CARBON_DIST = OUT_DIR / "carbon_dist.txt"
+SURFACE_TABLE = OUT_DIR / "surface_table.txt"
 
 
 def write_header(header_str, table_path):
@@ -220,6 +221,7 @@ write_header("sim_num N r_mean r_max z_mean z_max", RIM_TABLE)
 write_header("sim_num N r_mean r_max", CARBON_TABLE)
 write_header("sim_num N V S z_mean z_min", CRATER_TABLE)
 write_header("z count", CARBON_DIST)
+write_header("sim_num sigma", SURFACE_TABLE)
 
 
 def set_suffix(lmp):
@@ -371,6 +373,45 @@ def get_carbon(dump_final, carbon_sputtered):
 
 def calc_surface(data: Dump, run_dir: Path):
     SQUARE = LATTICE / 2
+
+
+    def plotting(square, run_dir): 
+        fig, ax = plt.subplots()
+        ax.pcolormesh(square)
+        ax.set_aspect('equal')
+        plt.pcolor(square, cmap = plt.get_cmap('viridis', 11))
+        plt.colorbar()
+        plt.savefig(f"{run_dir / 'surface_2d.pdf'}")
+    
+    
+    def histogram(data, run_dir):
+        data = data.flatten()
+        desired_bin_size = 5
+        num_bins = compute_histogram_bins(data, desired_bin_size)
+        fig, ax = plt.subplots()
+        n, bins, patches = plt.hist(data, num_bins, facecolor='green', alpha=1)
+        plt.xlabel('intensity')
+        plt.ylabel('count')
+        plt.title('intensity distribution')
+        plt.grid(True)
+        plt.savefig(f"{run_dir / 'surface_hist.pdf'}")
+    
+    
+    
+    def compute_histogram_bins(data, desired_bin_size):
+        min_val = np.min(data)
+        max_val = np.max(data)
+        min_boundary = min_val - min_val % desired_bin_size
+        max_boundary = max_val - max_val % desired_bin_size + desired_bin_size
+        n_bins = int((max_boundary - min_boundary) / desired_bin_size) + 1
+        num_bins = np.linspace(min_boundary, max_boundary, n_bins)
+        return num_bins
+
+
+    def get_linspace(left, right):
+        return np.linspace(left, right, round((right - left) / SQUARE) + 1)
+
+    SQUARE = LATTICE / 1
     
     def get_linspace(left, right):
         return np.linspace(left, right, round((right - left) / SQUARE) + 1)
@@ -399,7 +440,9 @@ def calc_surface(data: Dump, run_dir: Path):
             #print(Z[i,j])
 
     print(f'calc_surface: - NaN: {np.count_nonzero(np.isnan(Z))}')
-    Z[np.where(np.isnan(Z))] = np.nanmean(Z)
+    nanmean = np.nanmean(Z[Z != 0])
+    Z[np.where(np.isnan(Z))] = nanmean
+    Z[:-1, :-1][np.where(Z[:-1, :-1] == 0)] = nanmean
 
     n_X = Z.shape[0]
     X = np.linspace(0, n_X - 1, n_X, dtype=int)
@@ -408,18 +451,23 @@ def calc_surface(data: Dump, run_dir: Path):
     Y = np.linspace(0, n_Y - 1, n_Y, dtype=int)
 
     def f_Z(i, j):
-        return Z[i,j]
+       return Z[i,j]
 
-    z_all = Z.flatten()
-    z_all = np.sort(z_all[z_all != 0])
-    z_mean = z_all.mean()
-    print(f'calc_surface: - z_mean: {z_mean}')
-    z_deviation = abs(z_all - z_mean)**2.
+
+    z_plot = Z[:-1, :-1]
+    z_all = z_plot.flatten()
+    print(f'calc_surface: - z_mean: {nanmean}')
+    z_deviation = abs(z_all - nanmean)**2.
 
     z_data = np.zeros((len(z_all), 2))
     z_data[:,0] = z_all[:]
     z_data[:,1] = z_deviation[:]
+    sigma = np.sqrt(np.mean(z_data))
+    print(f'calc_surface: - D: {sigma}')
     #print(z_data)
+
+    plotting(z_plot, run_dir)
+    histogram(z_plot, run_dir)
 
     Xs, Ys = np.meshgrid(X, Y)
     Z = f_Z(Xs, Ys)
@@ -427,9 +475,9 @@ def calc_surface(data: Dump, run_dir: Path):
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
     ax.plot_surface(Xs, Ys, Z, cmap=cm.jet)
-    plt.savefig(f"{run_dir / 'surface.pdf'}")
+    plt.savefig(f"{run_dir / 'surface_3d.pdf'}")
 
-    return z_data
+    return z_data, sigma
 
 
 def get_carbon_hist(carbon):
@@ -774,12 +822,13 @@ def main():
         lmp.undump('final')
 
         dump_final_no_cluster = Dump(dump_final_no_cluster_path, dump_final_str)
-        surface_data = calc_surface(dump_final_no_cluster, run_dir)
+        surface_data, sigma = calc_surface(dump_final_no_cluster, run_dir)
         save_table(run_dir / 'surface_table.txt', surface_data, mode='w')
+        save_table(SURFACE_TABLE, [[run_num, sigma]], mode='a')
         
         lmp.command("unfix tbath")
         lmp.command("fix tbath nve temp/berendsen ${temperature} ${temperature} 0.001")
-        lmp.run(4000) 
+        lmp.run(1000) 
 
         lmp.command("unfix tbath")
         lmp.command("fix tbath thermostat temp/berendsen ${temperature} ${temperature} 0.001")
