@@ -618,7 +618,7 @@ def clusters_parse(file_path):
         clusters_dic[cluster_str][sim_num] += 1
 
     # total_sims = len(np.unique(clusters[:, 0]))
-    total_sims = 50
+    total_sims = N_RUNS
     total_clusters = len(clusters_dic.keys())
 
     table = np.zeros((total_sims, total_clusters + 1))
@@ -678,7 +678,7 @@ def clusters_parse_angle_dist(file_path):
     clusters_enrg_ang[:, 0] /= clusters_sim_num_n[:, 1]
 
     num_bins = (85 - 5) // 10 + 1
-    num_sims = 50 + 1
+    num_sims = N_RUNS + 1
 
     number_table = np.zeros((num_bins, num_sims))
     energy_table = np.zeros((num_bins, num_sims))
