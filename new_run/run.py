@@ -89,7 +89,7 @@ def parse_args():
         action="store",
         required=False,
         default=8,
-        type=int,
+        type=float,
         help="Set fall energy of the simulation. (keV)"
     )
 
@@ -175,7 +175,7 @@ SI_TOP = 15.3
 
 C60_X = 0
 C60_Y = 0
-C60_Z_OFFSET = 30
+C60_Z_OFFSET = 100
 
 IS_ALL_DUMP = True
 ALL_DUMP_INTERVAL = 20
@@ -309,7 +309,7 @@ def recalc_zero_lvl(lmp):
 def get_vacancies_group_cmd(lmp):
     vac_ids = lmp.extract_variable("vacancy_id", "Si", 1)
     vac_ids = vac_ids[vac_ids != 0]
-    return "group vac id " + " ".join(vac_ids.astype(int).astype(str))
+    return "group vac id " + " ".join(vac_ids.astype(int).astype(str)), len(vac_ids) != 0
 
 
 def get_clusters_table(cluster_dic, sim_num):
@@ -778,7 +778,7 @@ def main():
         lmp.undump('clusters')
         lmp.undump('final')
 
-        vac_group_cmd = get_vacancies_group_cmd(lmp)
+        vac_group_cmd, is_crater = get_vacancies_group_cmd(lmp)
         dump_cluster = Dump(dump_cluster_path, dump_cluster_str)
         dump_final = Dump(dump_final_path, dump_final_str)
 
@@ -837,29 +837,36 @@ def main():
         input_file = TMP / 'tmp.input.data'
         lmp.write_data(f'"{input_file}"')
 
+        print("not crashed a")
+
         lmp.close()
-        lmp = LammpsLibrary(cores=MPI_CORES)
-        
-        lmp.read_restart(f'"{vacs_restart_file}"')
-        lmp.command("pair_style tersoff/zbl\npair_coeff * * SiC.tersoff.zbl Si C\nneighbor 3.0 bin")
+
+        if (is_crater):
+            lmp = LammpsLibrary(cores=MPI_CORES)
+            print("not crashed b")
+            
+            lmp.read_restart(f'"{vacs_restart_file}"')
+            lmp.command("pair_style tersoff/zbl\npair_coeff * * SiC.tersoff.zbl Si C\nneighbor 3.0 bin")
+            print("not crashed c")
        
-        lmp.command(vac_group_cmd)
-        lmp.command("group si_all type 1")
-        lmp.command("compute voro_vol si_all voronoi/atom only_group")
-        lmp.command("compute clusters vac cluster/atom 3")
+            lmp.command(vac_group_cmd)
+            lmp.command("group si_all type 1")
+            lmp.command("compute voro_vol si_all voronoi/atom only_group")
+            lmp.command("compute clusters vac cluster/atom 3")
+            print("not crashed d")
 
-        dump_crater_path = run_dir / 'dump.crater'
-        dump_crater_str = 'id x y z vx vy vz type c_clusters'
-        lmp.command(
-            f"dump clusters vac custom 20 {dump_crater_path} {dump_crater_str}"
-        )
-        lmp.run(0)
+            dump_crater_path = run_dir / 'dump.crater'
+            dump_crater_str = 'id x y z vx vy vz type c_clusters'
+            lmp.command(
+                f"dump clusters vac custom 20 {dump_crater_path} {dump_crater_str}"
+            )
+            lmp.run(0)
 
-        dump_crater = Dump(dump_crater_path, dump_crater_str)
-        crater_info = get_crater_info(lmp, dump_crater, run_num)
-        save_table(CRATER_TABLE, crater_info, mode='a')
+            dump_crater = Dump(dump_crater_path, dump_crater_str)
+            crater_info = get_crater_info(lmp, dump_crater, run_num)
+            save_table(CRATER_TABLE, crater_info, mode='a')
 
-        lmp.close()
+            lmp.close()
 
     clusters_parse(CLUSTERS_TABLE)
     clusters_parse_sum(CLUSTERS_TABLE)
