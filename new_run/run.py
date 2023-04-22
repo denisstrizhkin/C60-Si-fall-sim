@@ -753,7 +753,8 @@ def main():
         lmp.variable('vacs_restart_file', 'index', f'"{vacs_restart_file}"')
 
         lmp.file(str(SCRIPT_DIR / "in.fall"))
-        recalc_zero_lvl(lmp)
+        if run_num == 1:
+          recalc_zero_lvl(lmp)
 
         lmp.command(
             f'fix temp_time all print 10 "$(time) $(temp)" file {run_dir}/temp_time.txt screen no'
