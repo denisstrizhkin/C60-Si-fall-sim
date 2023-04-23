@@ -411,7 +411,7 @@ def calc_surface(data: Dump, run_dir: Path):
     def get_linspace(left, right):
         return np.linspace(left, right, round((right - left) / SQUARE) + 1)
 
-    SQUARE = LATTICE / 1
+    SQUARE = LATTICE / 2
     
     def get_linspace(left, right):
         return np.linspace(left, right, round((right - left) / SQUARE) + 1)
@@ -440,10 +440,27 @@ def calc_surface(data: Dump, run_dir: Path):
             #print(Z[i,j])
 
     print(f'calc_surface: - NaN: {np.count_nonzero(np.isnan(Z))}')
-    nanmean = np.nanmean(Z[Z != 0])
-    Z[np.where(np.isnan(Z))] = nanmean
-    Z[:-1, :-1][np.where(Z[:-1, :-1] == 0)] = nanmean
+    def check_value(i, j):
+      if i < 0 or j < 0 or i >= len(X) - 1 or j >= len(Y) - 1:
+        return np.nan
+      if Z[i, j]:
+        return np.nan
+      return Z[i, j]
 
+    for i in range(len(X) - 1):
+      for j in range(len(Y) - 1):
+        if Z[i, j] == 0 or Z[i, j] == np.nan:
+          neighs = []
+          tmp.append(check_value(i - 1, j - 1))
+          tmp.append(check_value(i - 1, j    ))
+          tmp.append(check_value(i - 1, j + 1))
+          tmp.append(check_value(i + 1, j - 1))
+          tmp.append(check_value(i + 1, j    ))
+          tmp.append(check_value(i + 1, j + 1))
+          tmp.append(check_value(i    , j - 1))
+          tmp.append(check_value(i    , j + 1))
+          Z[i, j] = np.nanmean(tmp)
+          
     n_X = Z.shape[0]
     X = np.linspace(0, n_X - 1, n_X, dtype=int)
 
@@ -453,16 +470,9 @@ def calc_surface(data: Dump, run_dir: Path):
     def f_Z(i, j):
        return Z[i,j]
 
-
     z_plot = Z[:-1, :-1]
     z_all = z_plot.flatten()
-    print(f'calc_surface: - z_mean: {nanmean}')
-    z_deviation = abs(z_all - nanmean)**2.
-
-    z_data = np.zeros((len(z_all), 2))
-    z_data[:,0] = z_all[:]
-    z_data[:,1] = z_deviation[:]
-    sigma = np.sqrt(np.mean(z_data))
+    sigma = np.std(z_all)
     print(f'calc_surface: - D: {sigma}')
     #print(z_data)
 
@@ -477,7 +487,7 @@ def calc_surface(data: Dump, run_dir: Path):
     ax.plot_surface(Xs, Ys, Z, cmap=cm.jet)
     plt.savefig(f"{run_dir / 'surface_3d.pdf'}")
 
-    return z_data, sigma
+    return sigma
 
 
 def get_carbon_hist(carbon):
@@ -823,8 +833,8 @@ def main():
         lmp.undump('final')
 
         dump_final_no_cluster = Dump(dump_final_no_cluster_path, dump_final_str)
-        surface_data, sigma = calc_surface(dump_final_no_cluster, run_dir)
-        save_table(run_dir / 'surface_table.txt', surface_data, mode='w')
+        sigma = calc_surface(dump_final_no_cluster, run_dir)
+        #save_table(run_dir / 'surface_table.txt', surface_data, mode='w')
         save_table(SURFACE_TABLE, [[run_num, sigma]], mode='a')
         
         lmp.command("unfix tbath")
