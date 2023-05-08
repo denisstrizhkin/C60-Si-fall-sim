@@ -373,13 +373,15 @@ def get_carbon(dump_final, carbon_sputtered):
 
 def calc_surface(data: Dump, run_dir: Path):
     SQUARE = LATTICE / 2
+    VMIN = -20
+    VMAX = 10
 
 
     def plotting(square, run_dir): 
         fig, ax = plt.subplots()
         ax.pcolormesh(square)
         ax.set_aspect('equal')
-        plt.pcolor(square, vmin=-20, vmax=5, cmap=cm.viridis)
+        plt.pcolor(square, vmin=VMIN, vmax=VMAX, cmap=cm.viridis)
         plt.colorbar()
         plt.savefig(f"{run_dir / 'surface_2d.pdf'}")
     
@@ -473,7 +475,7 @@ def calc_surface(data: Dump, run_dir: Path):
 
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
-    ax.plot_surface(Xs, Ys, Z, vmin=-20, vmax=5, cmap=cm.viridis)
+    ax.plot_surface(Xs, Ys, Z, vmin=VMIN, vmax=VMAX, cmap=cm.viridis)
     SCALE = 2
     ax.set_zlim3d(z_all.min() * SCALE, z_all.max() * SCALE)
     plt.savefig(f"{run_dir / 'surface_3d.pdf'}")
