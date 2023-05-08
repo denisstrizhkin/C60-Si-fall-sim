@@ -379,7 +379,7 @@ def calc_surface(data: Dump, run_dir: Path):
         fig, ax = plt.subplots()
         ax.pcolormesh(square)
         ax.set_aspect('equal')
-        plt.pcolor(square, cmap = plt.get_cmap('viridis', 11))
+        plt.pcolor(square, vmin=-20, vmax=5, cmap=cm.viridis)
         plt.colorbar()
         plt.savefig(f"{run_dir / 'surface_2d.pdf'}")
     
@@ -390,12 +390,11 @@ def calc_surface(data: Dump, run_dir: Path):
         num_bins = compute_histogram_bins(data, desired_bin_size)
         fig, ax = plt.subplots()
         n, bins, patches = plt.hist(data, num_bins, facecolor='green', alpha=1)
-        plt.xlabel('intensity')
-        plt.ylabel('count')
-        plt.title('intensity distribution')
+        plt.xlabel('Z coordinate (Å)')
+        plt.ylabel('Count')
+        plt.title('Surface atoms depth distribution')
         plt.grid(True)
         plt.savefig(f"{run_dir / 'surface_hist.pdf'}")
-    
     
     
     def compute_histogram_bins(data, desired_bin_size):
@@ -411,80 +410,72 @@ def calc_surface(data: Dump, run_dir: Path):
     def get_linspace(left, right):
         return np.linspace(left, right, round((right - left) / SQUARE) + 1)
 
-    SQUARE = LATTICE / 2
-    
-    def get_linspace(left, right):
-        return np.linspace(left, right, round((right - left) / SQUARE) + 1)
 
     coeff = 5
     X = get_linspace(-LATTICE * coeff, LATTICE * coeff)
     Y = get_linspace(-LATTICE * coeff, LATTICE * coeff)
-    Z = np.zeros((len(X), len(Y)))
-    print("calc_surface: - X:", X) 
-    print("calc_surface: - Y:", Y) 
+    Z = np.zeros((len(X) - 1, len(Y) - 1))
+    Z[:] = np.nan
 
     for i in range(len(X) - 1):
-        for j in range(len(Y) - 1):
-            Z_vals = data['z'][np.where(
-                (data['x'] >= X[i]) &
-                (data['x'] < X[i + 1]) &
-                (data['y'] >= Y[j]) &
-                (data['y'] < Y[j + 1])
-            )]
+      for j in range(len(Y) - 1):
+        Z_vals = data['z'][np.where(
+          (data['x'] >= X[i]) &
+          (data['x'] < X[i + 1]) &
+          (data['y'] >= Y[j]) &
+          (data['y'] < Y[j + 1])
+        )]
+        if len(Z_vals) != 0:
+          Z[i, j] = Z_vals.max() - ZERO_LVL
 
-            if len(Z_vals) == 0:
-                Z[i, j] = np.nan
-            else:
-                Z[i, j] = Z_vals.max()
-
-            #print(Z[i,j])
 
     print(f'calc_surface: - NaN: {np.count_nonzero(np.isnan(Z))}')
     def check_value(i, j):
       if i < 0 or j < 0 or i >= len(X) - 1 or j >= len(Y) - 1:
-        return np.nan
-      if Z[i, j]:
         return np.nan
       return Z[i, j]
 
     for i in range(len(X) - 1):
       for j in range(len(Y) - 1):
         if Z[i, j] == 0 or Z[i, j] == np.nan:
-          neighs = []
-          tmp.append(check_value(i - 1, j - 1))
-          tmp.append(check_value(i - 1, j    ))
-          tmp.append(check_value(i - 1, j + 1))
-          tmp.append(check_value(i + 1, j - 1))
-          tmp.append(check_value(i + 1, j    ))
-          tmp.append(check_value(i + 1, j + 1))
-          tmp.append(check_value(i    , j - 1))
-          tmp.append(check_value(i    , j + 1))
-          Z[i, j] = np.nanmean(tmp)
+          neighs = [
+            check_value(i - 1, j - 1),
+            check_value(i - 1, j    ),
+            check_value(i - 1, j + 1),
+            check_value(i + 1, j - 1),
+            check_value(i + 1, j    ),
+            check_value(i + 1, j + 1),
+            check_value(i    , j - 1),
+            check_value(i    , j + 1)
+          ]
+          Z[i, j] = np.nanmean(neighs)
           
     n_X = Z.shape[0]
     X = np.linspace(0, n_X - 1, n_X, dtype=int)
 
     n_Y = Z.shape[1]
     Y = np.linspace(0, n_Y - 1, n_Y, dtype=int)
+    print(X.shape)
 
     def f_Z(i, j):
        return Z[i,j]
 
-    z_plot = Z[:-1, :-1]
-    z_all = z_plot.flatten()
+    z_all = Z.flatten()
     sigma = np.std(z_all)
     print(f'calc_surface: - D: {sigma}')
     #print(z_data)
 
-    plotting(z_plot, run_dir)
-    histogram(z_plot, run_dir)
+    plotting(Z, run_dir)
+    histogram(Z, run_dir)
 
     Xs, Ys = np.meshgrid(X, Y)
     Z = f_Z(Xs, Ys)
 
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
-    ax.plot_surface(Xs, Ys, Z, cmap=cm.jet)
+    ax.plot_surface(Xs, Ys, Z, vmin=-20, vmax=5, cmap=cm.viridis)
+    SCALE = 2
+    ax.set_zlim3d(z_all.min() * SCALE, z_all.max() * SCALE)
     plt.savefig(f"{run_dir / 'surface_3d.pdf'}")
 
     return sigma
@@ -627,7 +618,6 @@ def clusters_parse(file_path):
 
         clusters_dic[cluster_str][sim_num] += 1
 
-    # total_sims = len(np.unique(clusters[:, 0]))
     total_sims = N_RUNS
     total_clusters = len(clusters_dic.keys())
 
@@ -658,17 +648,15 @@ def clusters_parse_sum(file_path):
             clusters_dic[sim_num]["C"] = 0
         clusters_dic[sim_num]["Si"] += cluster[1]
         clusters_dic[sim_num]["C"] += cluster[2]
+    table = np.zeros((N_RUNS, 4))
 
-    total_sims = len(clusters_dic.keys())
-    table = np.zeros((total_sims, 4))
-
-    keys = list(clusters_dic.keys())
-    for i in range(0, len(keys)):
+    for i in range(0, N_RUNS):
         sim_num = keys[i]
-        table[i][0] = keys[i]
-        table[i][1] = clusters_dic[sim_num]["Si"]
-        table[i][2] = clusters_dic[sim_num]["C"]
-        table[i][3] = table[i][1] + table[i][2]
+        table[i][0] = i
+        if i in clusters_dic:
+          table[i][1] = clusters_dic[i]["Si"]
+          table[i][2] = clusters_dic[i]["C"]
+          table[i][3] = table[i][1] + table[i][2]
 
     header_str = "simN Si C"
     output_path = (
