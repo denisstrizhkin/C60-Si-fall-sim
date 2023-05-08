@@ -563,45 +563,6 @@ def save_table(filename, table, header="", dtype="f", precision=5, mode='w'):
         np.savetxt(file, table, delimiter="\t", fmt=fmt_str, header=header)
 
 
-def carbon_dist_parse(file_path):
-    with open(file_path, "r") as f:
-        lines = f.readlines()
-
-    lines_dic = {}
-    sim_num = -1
-    for i in range(1, len(lines)):
-        tokens = lines[i].strip().split()
-        if lines[i][0] == "#":
-            sim_num = int(tokens[1])
-            lines_dic[sim_num] = []
-        else:
-            lines_dic[sim_num].append(list(map(float, tokens)))
-
-    z_min = 0
-    z_max = 0
-    for key in lines_dic.keys():
-        z_min = min(lines_dic[key][0][0], z_min)
-        z_max = max(lines_dic[key][len(lines_dic[key]) - 1][0], z_max)
-
-    bins = np.linspace(z_min, z_max, int(z_max - z_min) + 1)
-    table = np.zeros((len(lines_dic) + 1, len(bins) + 1))
-
-    sim_nums = list(lines_dic.keys())
-    for i in range(0, len(sim_nums)):
-        table[i + 1][0] = sim_nums[i]
-        for pair in lines_dic[sim_nums[i]]:
-            index = int(pair[0] - z_min)
-            table[i + 1][index + 1] = pair[1]
-
-    for i in range(0, len(bins)):
-        table[0][i + 1] = bins[i]
-
-    header_str = "simN " + " ".join(list(map(str, bins)))
-
-    output_path = path.splitext(file_path)[0] + "_parsed" + path.splitext(file_path)[1]
-    save_table(output_path, table.T, header_str)
-
-
 def clusters_parse(file_path):
     clusters = np.loadtxt(file_path, ndmin=2, skiprows=1)
     clusters = clusters[:, :3]
@@ -650,13 +611,12 @@ def clusters_parse_sum(file_path):
         clusters_dic[sim_num]["C"] += cluster[2]
     table = np.zeros((N_RUNS, 4))
 
-    for i in range(0, N_RUNS):
-        sim_num = keys[i]
-        table[i][0] = i
+    for i in clusters_dic.keys():
+        table[i - 1][0] = i
         if i in clusters_dic:
-          table[i][1] = clusters_dic[i]["Si"]
-          table[i][2] = clusters_dic[i]["C"]
-          table[i][3] = table[i][1] + table[i][2]
+          table[i - 1][1] = clusters_dic[i]["Si"]
+          table[i - 1][2] = clusters_dic[i]["C"]
+          table[i - 1][3] = table[i - 1][1] + table[i - 1][2]
 
     header_str = "simN Si C"
     output_path = (
@@ -672,8 +632,9 @@ def clusters_parse_angle_dist(file_path):
     clusters_sim_num_n = clusters[:, :2]
     clusters_sim_num_n[:, 1] = clusters[:, 1] + clusters[:, 2]
 
-    clusters_enrg_ang = clusters[:, :-2]
+    clusters_enrg_ang = clusters[:, -2:]
     clusters_enrg_ang[:, 0] /= clusters_sim_num_n[:, 1]
+    print(clusters_enrg_ang)
 
     num_bins = (85 - 5) // 10 + 1
     num_sims = N_RUNS + 1
@@ -694,6 +655,8 @@ def clusters_parse_angle_dist(file_path):
         number_table[angle_index, sim_index] += clusters_sim_num_n[i, 1]
         energy_table[angle_index, sim_index] += clusters_enrg_ang[i, 1]
 
+    print(number_table[:,:10])
+
     header_str_number = "angle N1 N2 N3 ... N50"
     output_path_number = (
             path.splitext(file_path)[0]
@@ -709,6 +672,45 @@ def clusters_parse_angle_dist(file_path):
             + path.splitext(file_path)[1]
     )
     save_table(output_path_energy, energy_table, header_str_energy)
+
+
+def carbon_dist_parse(file_path):
+    with open(file_path, "r") as f:
+        lines = f.readlines()
+
+    lines_dic = {}
+    sim_num = -1
+    for i in range(1, len(lines)):
+        tokens = lines[i].strip().split()
+        if lines[i][0] == "#":
+            sim_num = int(tokens[1])
+            lines_dic[sim_num] = []
+        else:
+            lines_dic[sim_num].append(list(map(float, tokens)))
+
+    z_min = 0
+    z_max = 0
+    for key in lines_dic.keys():
+        z_min = min(lines_dic[key][0][0], z_min)
+        z_max = max(lines_dic[key][len(lines_dic[key]) - 1][0], z_max)
+
+    bins = np.linspace(z_min, z_max, int(z_max - z_min) + 1)
+    table = np.zeros((len(lines_dic) + 1, len(bins) + 1))
+
+    sim_nums = list(lines_dic.keys())
+    for i in range(0, len(sim_nums)):
+        table[i + 1][0] = sim_nums[i]
+        for pair in lines_dic[sim_nums[i]]:
+            index = int(pair[0] - z_min)
+            table[i + 1][index + 1] = pair[1]
+
+    for i in range(0, len(bins)):
+        table[0][i + 1] = bins[i]
+
+    header_str = "simN " + " ".join(list(map(str, bins)))
+
+    output_path = path.splitext(file_path)[0] + "_parsed" + path.splitext(file_path)[1]
+    save_table(output_path, table.T, header_str)
 
 
 def main():
