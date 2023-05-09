@@ -1,4 +1,4 @@
-#!/bin/python3
+#!/usr/bin/env python
 
 from pylammpsmpi import LammpsLibrary
 import numpy as np
