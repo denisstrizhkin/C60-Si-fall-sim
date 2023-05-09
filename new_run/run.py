@@ -209,6 +209,7 @@ CARBON_TABLE = OUT_DIR / "carbon_table.txt"
 CRATER_TABLE = OUT_DIR / "crater_table.txt"
 CARBON_DIST = OUT_DIR / "carbon_dist.txt"
 SURFACE_TABLE = OUT_DIR / "surface_table.txt"
+COORD_NUM_TABLE = OUT_DIR / "coord_num_table.txt"
 
 
 def write_header(header_str, table_path):
@@ -222,6 +223,7 @@ write_header("sim_num N r_mean r_max", CARBON_TABLE)
 write_header("sim_num N V S z_mean z_min", CRATER_TABLE)
 write_header("z count", CARBON_DIST)
 write_header("sim_num sigma", SURFACE_TABLE)
+write_header("sim_num id Si C Sum", COORD_NUM_TABLE)
 
 
 def set_suffix(lmp):
@@ -819,15 +821,33 @@ def main():
             lmp.command(cluster_group_command)
             lmp.delete_atoms('group', 'cluster')
         
+        lmp.command("compute coord_num_C C coord/atom cutoff 1.88 group C")
+        lmp.command("compute coord_num_Si C coord/atom cutoff 1.88 group Si")
+        lmp.command('variable coord_num_Sum atom "c_coord_num_C + c_coord_num_Si"')
+        
         dump_final_no_cluster_path = run_dir / 'dump.final_no_cluster'
         lmp.command(f'dump final all custom 1 {dump_final_no_cluster_path} {dump_final_str}')
+        
+        dump_coord_num_path = run_dir / 'dump.coord_num'
+        dump_coord_num_str = "id c_coord_num_C c_coord_num_Si v_coord_num_Sum"
+        lmp.command(f'dump coord_num C custom 1 {dump_coord_num_path} {dump_coord_num_str}')
+        
         lmp.run(0)
         lmp.undump('final')
 
         dump_final_no_cluster = Dump(dump_final_no_cluster_path, dump_final_str)
+        dump_coord_num = Dump(dump_coord_num_path, dump_coord_num_str)
         sigma = calc_surface(dump_final_no_cluster, run_dir)
         #save_table(run_dir / 'surface_table.txt', surface_data, mode='w')
         save_table(SURFACE_TABLE, [[run_num, sigma]], mode='a')
+
+        coord_num_table = np.zeros((len(dump_coord_num['id']), 5))
+        coord_num_table[:,0] = run_num
+        coord_num_table[:,1] = dump_coord_num['id']
+        coord_num_table[:,2] = dump_coord_num['c_coord_num_C']
+        coord_num_table[:,3] = dump_coord_num['c_coord_num_Si']
+        coord_num_table[:,4] = dump_coord_num['v_coord_num_Sum']
+        save_table(COORD_NUM_TABLE, coord_num_table, mode='a')
         
         lmp.command("unfix tbath")
         lmp.command("fix tbath nve temp/berendsen ${temperature} ${temperature} 0.001")
