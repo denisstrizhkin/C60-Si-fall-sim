@@ -1,9 +1,13 @@
+from pathlib import Path
+from typing import List
+import numpy as np
 
 
 class Dump:
     def __init__(self, dump_path: Path, dump_str: str):
         self.data = np.loadtxt(dump_path, ndmin=2, skiprows=9)
         self.keys = dump_str.split()
+        self.name = str(dump_path)
 
         if len(set(self.keys)) != len(self.keys):
             raise ValueError('dump keys must be unique')
