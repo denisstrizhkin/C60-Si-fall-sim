@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 
 sys.path.append('../')
-from util import Dump, Atom, calc_surface
+from util import Dump, Atom, Cluster, calc_surface
 
 
 def parse_args():
