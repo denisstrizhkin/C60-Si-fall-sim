@@ -5,12 +5,16 @@ import numpy as np
 from pathlib import Path
 import argparse
 import os
+import sys
 from os import path
 import tempfile
 from typing import List
 
 import matplotlib.pyplot as plt
 from matplotlib import cm
+
+sys.path.append('../')
+from util import Dump, Atom, calc_surface
 
 
 def parse_args():
