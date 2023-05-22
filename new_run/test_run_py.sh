@@ -4,10 +4,10 @@
   --omp-threads 0 \
   --mpi-cores 6 \
   \
-  --temperature 0 \
+  --temperature 300 \
   --energy 8 \
-  --runs 1 \
-  --run-time 2000 \
+  --runs 300 \
+  --run-time 5000 \
   \
-  --results-dir './res_40' \
-  --input-file '../input_files/fall0_2.input.data' \
+  --results-dir './res_300_0K_8kev' \
+  --input-file '../input_files/fall300_2.input.data' \

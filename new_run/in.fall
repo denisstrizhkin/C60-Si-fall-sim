@@ -40,7 +40,7 @@ write_restart ${vacs_restart_file}
 pair_style tersoff/zbl
 pair_coeff * * SiC.tersoff.zbl Si C
 neighbor 4.0 bin
-neigh_modify one 4000
+neigh_modify one 800000
 
 ### C60 molecule ###
 molecule C60 ${mol_file}

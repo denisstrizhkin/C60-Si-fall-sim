@@ -1,6 +1,6 @@
 #!/bin/bash
 
-mpirun -np 10 lmp \
+mpirun -np 6 lmp \
   -in in.fall \
   -suffix gpu \
   -package gpu 0 \
