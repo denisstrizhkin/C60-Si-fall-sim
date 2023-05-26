@@ -1,7 +1,16 @@
 from pathlib import Path
 from typing import List
 import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib import cm
 
+
+SI_ATOM_TYPE = 1
+C_ATOM_TYPE = 2
+
+LATTICE = 5.43
+
+ZERO_LVL = 82.4535
 
 class Dump:
     def __init__(self, dump_path: Path, dump_str: str):

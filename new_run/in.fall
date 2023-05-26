@@ -6,6 +6,7 @@ atom_style atomic
 atom_modify map yes
 
 read_data ${input_file}
+balance 1.0 shift xyz 10 1.0
 
 
 ### variables ###
@@ -40,7 +41,7 @@ write_restart ${vacs_restart_file}
 pair_style tersoff/zbl
 pair_coeff * * SiC.tersoff.zbl Si C
 neighbor 4.0 bin
-neigh_modify one 800000
+neigh_modify one 4000
 
 ### C60 molecule ###
 molecule C60 ${mol_file}
@@ -65,6 +66,9 @@ group outside subtract Si not_outside
 # compute ke per atom
 compute atom_ke all ke/atom
 
+#temp
+#variable zero_lvl equal "83.2"
+
 # voronoi
 compute voro_occupation Si voronoi/atom occupation only_group
 variable is_vacancy atom "c_voro_occupation[1]==0"
@@ -86,6 +90,7 @@ thermo_style custom step pe ke etotal temp c_vacancies dt time c_sputter_all c_s
 
 
 ### fixes ###
+fix balance all balance 100 1.0 shift xyz 10 1.0
 fix nve nve nve
 fix tbath thermostat temp/berendsen ${temperature} ${temperature} 0.001
 fix estop all electron/stopping 10.0 ${elstop_table}
@@ -98,3 +103,5 @@ dump during all custom 100 dump.during id type x y z
 
 ### run simulation ###
 velocity C60 set NULL NULL ${C60_vel} sum yes units box
+
+#run 500
