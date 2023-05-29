@@ -72,15 +72,21 @@ class Cluster:
 
 def calc_surface(data: Dump, run_dir: Path):
     SQUARE = LATTICE / 2
+    COEFF = 5
     VMIN = -20
     VMAX = 10
 
 
     def plotting(square, run_dir): 
         fig, ax = plt.subplots()
-        ax.pcolormesh(square)
+        
+        width = len(square) + 1
+        x = np.linspace(0, COEFF * LATTICE * 2, width)
+        y = np.linspace(0, COEFF * LATTICE * 2, width)
+        x, y = np.meshgrid(x, y)
+        
         ax.set_aspect('equal')
-        plt.pcolor(square, vmin=VMIN, vmax=VMAX, cmap=cm.viridis)
+        plt.pcolor(x, y, square, vmin=VMIN, vmax=VMAX, cmap=cm.viridis)
         plt.colorbar()
         plt.savefig(f"{run_dir / 'surface_2d.pdf'}")
     
@@ -112,9 +118,8 @@ def calc_surface(data: Dump, run_dir: Path):
         return np.linspace(left, right, round((right - left) / SQUARE) + 1)
 
 
-    coeff = 5
-    X = get_linspace(-LATTICE * coeff, LATTICE * coeff)
-    Y = get_linspace(-LATTICE * coeff, LATTICE * coeff)
+    X = get_linspace(-LATTICE * COEFF, LATTICE * COEFF)
+    Y = get_linspace(-LATTICE * COEFF, LATTICE * COEFF)
     Z = np.zeros((len(X) - 1, len(Y) - 1))
     Z[:] = np.nan
 
@@ -174,9 +179,9 @@ def calc_surface(data: Dump, run_dir: Path):
 
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
-    ax.plot_surface(Xs, Ys, Z, vmin=VMIN, vmax=VMAX, cmap=cm.viridis)
+    ax.plot_surface(Xs * SQUARE, Ys * SQUARE, Z, vmin=VMIN, vmax=VMAX, cmap=cm.viridis)
     SCALE = 2
-    ax.set_zlim3d(z_all.min() * SCALE, z_all.max() * SCALE)
+    ax.set_zlim3d(-60,15)
     plt.savefig(f"{run_dir / 'surface_3d.pdf'}")
 
     return sigma
