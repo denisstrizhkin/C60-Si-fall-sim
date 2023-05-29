@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 
 sys.path.append('../')
-from util import Dump, Atom, Cluster, calc_surface
+from util import Dump, Atom, Cluster, calc_surface, save_table
 
 
 def parse_args():
@@ -390,16 +390,6 @@ def get_crater_info(lmp, dump_crater: Dump, sim_num):
     )
 
 
-def save_table(filename, table, header="", dtype="f", precision=5, mode='w'):
-    fmt_str = ""
-
-    if dtype == "d":
-        fmt_str = "%d"
-    elif dtype == "f":
-        fmt_str = f"%.{precision}f"
-
-    with open(filename, f"{mode}b") as file:
-        np.savetxt(file, table, delimiter="\t", fmt=fmt_str, header=header)
 
 
 def clusters_parse(file_path):

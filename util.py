@@ -185,3 +185,15 @@ def calc_surface(data: Dump, run_dir: Path):
     plt.savefig(f"{run_dir / 'surface_3d.pdf'}")
 
     return sigma
+
+
+def save_table(filename, table, header="", dtype="f", precision=5, mode='w'):
+    fmt_str = ""
+
+    if dtype == "d":
+        fmt_str = "%d"
+    elif dtype == "f":
+        fmt_str = f"%.{precision}f"
+
+    with open(filename, f"{mode}b") as file:
+        np.savetxt(file, table, delimiter="\t", fmt=fmt_str, header=header)
