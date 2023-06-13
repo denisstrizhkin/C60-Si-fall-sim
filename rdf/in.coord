@@ -1,0 +1,57 @@
+### INIT ###
+units metal
+dimension 3
+boundary p p m
+atom_style atomic
+atom_modify map yes
+
+
+### SET LATTICE ###
+lattice diamond 5.43 orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
+
+
+### CREATE SYM BOX ###
+variable width equal "20"
+variable depth equal "16"
+
+region symbox block -${width} ${width} -${width} ${width} -${depth} 200 units lattice
+create_box 2 symbox
+
+
+### READ ATOMS FROM DUMP  ###
+# id x y z vx vy vz type
+read_dump ./input.data 5000 x y z vx vy vz add yes
+
+
+### POTENTIALS ###
+pair_style hybrid airebo 3.0 tersoff/zbl
+pair_coeff * * tersoff/zbl SiC.tersoff.zbl Si C
+pair_coeff 2 2 none
+pair_coeff * * airebo CH.airebo NULL C
+neighbor 4.0 bin
+neigh_modify one 4000
+
+
+### GROUPS ###
+group C type 2
+group Si type 1
+
+
+### MASSES ###
+mass 1 28.08553
+mass 2 12.011
+
+
+### COMPUTES ###
+compute coord_num_C  C coord/atom cutoff ${C_cutoff}  group C
+compute coord_num_Si C coord/atom cutoff ${Si_cutoff} group Si
+variable coord_num_Sum atom "c_coord_num_C + c_coord_num_Si"
+
+
+### WRITE COORD NUMBERS DUMP ###
+dump 1 C custom 1 ${dump_name} id c_coord_num_C c_coord_num_Si v_coord_num_Sum
+run 0
+
+
+### SAVE CURRENT DATA ###
+write_data out.input.data

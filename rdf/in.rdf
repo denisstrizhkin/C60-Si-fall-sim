@@ -1,0 +1,51 @@
+### init ###
+units metal
+dimension 3
+boundary p p m
+atom_style atomic
+atom_modify map yes
+
+# SET LATTICE
+lattice diamond 5.43 orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
+
+# CREATE SYMULATION BOX
+variable width equal "20"
+variable depth equal "16"
+
+region symbox block -${width} ${width} -${width} ${width} -${depth} 200 units lattice
+create_box 2 symbox
+
+# id x y z vx vy vz type
+read_dump ./input.data 5000 x y z vx vy vz add yes
+
+### potentials ###
+if "0 > 0" then &
+  "pair_style hybrid airebo 3.0 tersoff/zbl" &
+  "pair_coeff * * tersoff/zbl SiC.tersoff.zbl Si C" &
+  "pair_coeff 2 2 none" & 
+  "pair_coeff * * airebo CH.airebo NULL C" &
+else &
+  "pair_style tersoff/zbl" &
+  "pair_coeff * * SiC.tersoff.zbl Si C"
+neighbor 4.0 bin
+neigh_modify one 4000
+
+### groups ###
+group C type 2
+group Si type 1
+
+mass 1 28.08553
+mass 2 12.011
+
+compute rdf_C  all rdf 100 2 2 cutoff 3.0
+compute rdf_Si all rdf 100 2 1 cutoff 3.0
+compute rdf_All all rdf 100
+
+#write_dump all custom dump.rdf_c c_rdf_C[*]
+fix 1 all ave/time 100 1 100 c_rdf_C[*] file rdf_C.txt mode vector
+fix 2 all ave/time 100 1 100 c_rdf_Si[*] file rdf_Si.txt mode vector
+fix 3 all ave/time 100 1 100 c_rdf_All[*] file rdf_All.txt mode vector
+
+run 0
+
+write_data out.input.data
