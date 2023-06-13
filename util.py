@@ -3,14 +3,18 @@ from typing import List
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
+import sys
+import os
+import subprocess
+import time
 
 
-SI_ATOM_TYPE = 1
-C_ATOM_TYPE = 2
+DOCKER_BASE: List[str] = [
+  'docker', 'run', '--rm',
+  '-v', f'{os.getcwd()}:/var/workdir',
+  '--user', f'{os.getuid()}:{os.getgid()}'
+]
 
-LATTICE = 5.43
-
-ZERO_LVL = 82.4535
 
 class Dump:
     def __init__(self, dump_path: Path, dump_str: str):
@@ -68,6 +72,46 @@ class Cluster:
         
         self.angle = np.arctan(self.mz / np.sqrt(self.mx ** 2 + self.my ** 2))
         self.angle = 90 - self.angle * 180 / np.pi
+
+
+def lammps_run(
+  in_file: Path, vars: List[str]=None,
+  omp_threads: int=4, mpi_cores: int=3
+  ):
+  mpirun_base = [
+    'mpirun', '-np', str(mpi_cores),
+    'lmp', '-in', str(in_file)
+  ]
+
+  if (omp_threads <= 0):
+    args = mpirun_base + [
+      '-sf', 'gpu',
+      '-pk', 'gpu', '0',
+    ] + vars
+    run_args = DOCKER_BASE + [
+      '--gpus', 'all',
+      'lammpsopencl'
+    ]
+  else:
+    args = mpirun_base + [
+      '-sf', 'omp',
+      '-pk', 'omp', str(omp_threads),
+    ] + vars
+    run_args = DOCKER_BASE + [
+      'lammpsmpi'
+    ]
+
+  print(args)
+  run_args = run_args + [ ' '.join(args) ]
+  print(run_args)
+
+  process = subprocess.Popen(run_args, encoding='utf-8')
+  while process.poll() is None:
+    time.sleep(1)
+
+  if process.returncode != 0:
+    print("LAMMPS RUN: FAIL")
+    sys.exit()
 
 
 def calc_surface(data: Dump, run_dir: Path):
