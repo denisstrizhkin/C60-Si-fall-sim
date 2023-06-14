@@ -123,11 +123,11 @@ run 0
 undump clusters
 undump final
 
-fix tbath nve temp/berendsen ${temperature} ${temperature} 0.001"
+fix tbath nve temp/berendsen ${temperature} ${temperature} 0.001
 run 1000 
 
 unfix tbath
-fix tbath thermostat temp/berendsen ${temperature} ${temperature} 0.001"
+fix tbath thermostat temp/berendsen ${temperature} ${temperature} 0.001
 run 1000
 
 write_data ${write_file}
