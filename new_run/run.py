@@ -592,12 +592,11 @@ def main() -> None:
         with open(dump_final_path, 'r') as f_in, open(dump_final_no_cluster_path, 'w') as f_out:
             cnt = 0
             for line in f_in:
-                cur_id = int(line.split()[0])
                 if cnt < 9:
                     continue
                 cnt += 1
 
-                if not cur_id in ids_to_delete:
+                if not int(line.split()[0]) in ids_to_delete:
                     f_out.write(line)
 
         dump_final_no_cluster = Dump(dump_final_no_cluster_path)
