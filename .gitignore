@@ -1,3 +1,5 @@
 *.lammps
 dump.*
 results
+.vscode
+*__pycache__*
