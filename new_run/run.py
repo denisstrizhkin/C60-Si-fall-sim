@@ -590,12 +590,12 @@ def main() -> None:
 
         dump_final_no_cluster_path = run_dir / 'dump.final_no_cluster'
         with open(dump_final_path, 'r') as f_in, open(dump_final_no_cluster_path, 'w') as f_out:
+            cnt = 0
             for line in f_in:
-                cur_id = -1
-                try:
-                    cur_id = int(line.split()[0])
-                except Exception:
-                    pass
+                cur_id = int(line.split()[0])
+                if cnt < 9:
+                    continue
+                cnt += 1
 
                 if not cur_id in ids_to_delete:
                     f_out.write(line)
