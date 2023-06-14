@@ -76,7 +76,8 @@ class Cluster:
 def lammps_run(
   in_file: Path, vars: List[Tuple[str, str]]=[],
   omp_threads: int=4, mpi_cores: int=3,
-  workdir: Path=Path(os.getcwd())
+  workdir: Path=Path(os.getcwd()),
+  log_file: Path=Path('./log.lammps')
   ) -> None:
   docker_base: List[str] = [
     'docker', 'run', '--rm',
@@ -111,16 +112,16 @@ def lammps_run(
   if len(vars) != 0:
     vars_str = ' -var ' + ' -var '.join(map(lambda x: f'{x[0]} {x[1]}', vars))
 
-  print(args)
-  run_args = run_args + [ ' '.join(args) + vars_str ]
-  print(run_args)
+  print('lammps_run:', args)
+  run_args = run_args + [ ' '.join(args) + vars_str + f' -log {log_file}' ]
+  print('lammps_run:', run_args)
 
   process = subprocess.Popen(run_args, encoding='utf-8')
   while process.poll() is None:
     time.sleep(1)
 
   if process.returncode != 0:
-    print("LAMMPS RUN: FAIL")
+    print("lammps_run: FAIL")
     sys.exit()
 
 

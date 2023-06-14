@@ -213,32 +213,6 @@ def get_cluster_dic(cluster_dump: Dump):
     return cluster_dic, rim_atoms
 
 
-def recalc_zero_lvl(lmp):
-    global ZERO_LVL
-
-    lmp.variable('outside_id', 'atom', 'id')
-    outside_id = extract_ids_var(lmp, "outside_id", "outside")
-    outside_z = lmp.gather_atoms("x", ids=outside_id)[:, 2]
-    outside_z = np.sort(outside_z)[-20:]
-    max_outside_z = outside_z.mean()
-
-    lmp.region('surface', 'block', 'EDGE', 'EDGE', 'EDGE', 'EDGE', max_outside_z - 1.35, max_outside_z, 'units', 'box')
-    lmp.group('surface', 'region', 'surface')
-    lmp.group('outside_surface', 'intersect', 'surface', 'outside')
-
-    lmp.compute('ave_outside_z', 'outside_surface', 'reduce', 'ave', 'z')
-    ave_outside_z = lmp.extract_compute("ave_outside_z", 0, 0)
-    delta = max_outside_z - ave_outside_z
-    ZERO_LVL = ave_outside_z + delta * 2
-
-    lmp.variable('zero_lvl', 'index', ZERO_LVL)
-
-    lmp.print(f"'max_outside_z {max_outside_z}'")
-    lmp.print(f"'ave_outside_z: {ave_outside_z}'")
-    lmp.print(f"'delta: {delta}'")
-    lmp.print(f"'new zer_lvl: {ZERO_LVL}'")
-
-
 def get_vacancies_group_cmd(lmp):
     vac_ids = lmp.extract_variable("vacancy_id", "Si", 1)
     vac_ids = vac_ids[vac_ids != 0]
@@ -527,7 +501,7 @@ def carbon_dist_parse(file_path):
 
 
 def main() -> None:
-    input_file: Path = INPUT_FILE
+    input_file: Path = WORKDIR / INPUT_FILE
     for i in range(N_RUNS):
         run_num = i + 1
         run_dir: Path = OUT_DIR / f"run_{run_num}"
@@ -543,12 +517,16 @@ def main() -> None:
         fu_y = rnd_coord(C60_Y)
 
         vacs_restart_file: Path = TMP / 'vacs.restart'
+
         dump_cluster_path: Path = run_dir / 'dump.cluster'
         dump_final_path: Path = run_dir / 'dump.final'
+        dump_during_path: Path = run_dir / 'dump.during'
+
+        log_file: Path = run_dir / 'log.lammps'
         write_file = WORKDIR / 'tmp.input.data'
 
         vars = [
-            ('input_file', str(input_file)),
+            ('input_file', str(input_file.relative_to(WORKDIR))),
             ('mol_file', str(MOL_FILE)),
             ('elstop_table', str(ELSTOP_TABLE)),
 
@@ -568,12 +546,14 @@ def main() -> None:
 
             ('dump_cluster', str(dump_cluster_path.relative_to(WORKDIR))),
             ('dump_final', str(dump_final_path.relative_to(WORKDIR))),
+            ('dump_during', str(dump_during_path.relative_to(WORKDIR))),
 
             ('write_file', str(write_file.relative_to(WORKDIR)))
         ]
 
         workdir=Path('../')
-        util.lammps_run(Path('new_run/in.fall'), vars, omp_threads=10, mpi_cores=1, workdir=workdir)
+        util.lammps_run(Path('new_run/in.fall'), vars, omp_threads=OMP_THREADS, mpi_cores=MPI_CORES, workdir=workdir, log_file=log_file.relative_to(WORKDIR))
+        input_file = write_file
 
         dump_cluster = Dump(dump_cluster_path)
         dump_final = Dump(dump_final_path)
