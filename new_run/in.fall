@@ -104,4 +104,23 @@ dump during all custom 100 dump.during id type x y z
 ### run simulation ###
 velocity C60 set NULL NULL ${C60_vel} sum yes units box
 
-#run 500
+#fix temp_time all print 10 "$(time) $(temp)" file {run_dir}/temp_time.txt screen no
+#fix penrg_time all print 10 "$(time) $(pe)" file {run_dir}/penrg_time.txt screen no
+
+run 200
+unfix estop
+run ${run_time}
+
+group clusters variable is_sputtered
+compute clusters all cluster/atom 3
+compute mass clusters property/atom mass
+
+dump clusters clusters custom 1 ${dump_cluster} id x y z vx vy vz type c_mass c_clusters c_atom_ke
+dump final all custom 1 ${dump_final} id x y z vx vy vz type c_clusters c_atom_ke
+
+run 0
+
+undump clusters
+undump final
+
+write_data ${write_file}

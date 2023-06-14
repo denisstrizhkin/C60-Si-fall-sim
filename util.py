@@ -1,25 +1,24 @@
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
 import sys
 import os
+import shutil
 import subprocess
 import time
 
 
-DOCKER_BASE: List[str] = [
-  'docker', 'run', '--rm',
-  '-v', f'{os.getcwd()}:/var/workdir',
-  '--user', f'{os.getuid()}:{os.getgid()}'
-]
-
-
 class Dump:
-    def __init__(self, dump_path: Path, dump_str: str):
+    def __init__(self, dump_path: Path):
         self.data = np.loadtxt(dump_path, ndmin=2, skiprows=9)
-        self.keys = dump_str.split()
+
+        with open(dump_path, 'r', encoding='utf-8') as file:
+          self.keys = file.readlines()[8].split()
+          self.keys = self.keys[2:]
+        print(self.keys)
+
         self.name = str(dump_path)
 
         if len(set(self.keys)) != len(self.keys):
@@ -49,7 +48,7 @@ class Atom:
 
 
 class Cluster:
-    def __init__(self, clusters: List[Atom]):
+    def __init__(self, clusters: List[Atom], si_atom_type):
         self.mass = 0
         self.count_Si = 0
         self.count_C = 0
@@ -63,7 +62,7 @@ class Cluster:
             self.mz += cluster.vz * cluster.mass
             self.mass += cluster.mass 
 
-            if cluster.type == SI_ATOM_TYPE:
+            if cluster.type == si_atom_type:
                 self.count_Si += 1
             else:
                 self.count_C += 1
@@ -75,9 +74,16 @@ class Cluster:
 
 
 def lammps_run(
-  in_file: Path, vars: List[str]=None,
-  omp_threads: int=4, mpi_cores: int=3
-  ):
+  in_file: Path, vars: List[Tuple[str, str]]=[],
+  omp_threads: int=4, mpi_cores: int=3,
+  workdir: Path=Path(os.getcwd())
+  ) -> None:
+  docker_base: List[str] = [
+    'docker', 'run', '--rm',
+    '-v', f'{workdir.resolve()}:/var/workdir',
+    '--user', f'{os.getuid()}:{os.getgid()}'
+  ]
+
   mpirun_base = [
     'mpirun', '-np', str(mpi_cores),
     'lmp', '-in', str(in_file)
@@ -87,8 +93,8 @@ def lammps_run(
     args = mpirun_base + [
       '-sf', 'gpu',
       '-pk', 'gpu', '0',
-    ] + vars
-    run_args = DOCKER_BASE + [
+    ]
+    run_args = docker_base + [
       '--gpus', 'all',
       'lammpsopencl'
     ]
@@ -96,13 +102,17 @@ def lammps_run(
     args = mpirun_base + [
       '-sf', 'omp',
       '-pk', 'omp', str(omp_threads),
-    ] + vars
-    run_args = DOCKER_BASE + [
+    ]
+    run_args = docker_base + [
       'lammpsmpi'
     ]
 
+  vars_str: str = ''
+  if len(vars) != 0:
+    vars_str = ' -var ' + ' -var '.join(map(lambda x: f'{x[0]} {x[1]}', vars))
+
   print(args)
-  run_args = run_args + [ ' '.join(args) ]
+  run_args = run_args + [ ' '.join(args) + vars_str ]
   print(run_args)
 
   process = subprocess.Popen(run_args, encoding='utf-8')
@@ -114,8 +124,76 @@ def lammps_run(
     sys.exit()
 
 
-def calc_surface(data: Dump, run_dir: Path):
-    SQUARE = LATTICE / 2
+def calc_surface_values(data: Dump, lattice: float, coeff: float, square: float) -> np.ndarray:
+  def get_linspace(left, right):
+        return np.linspace(left, right, round((right - left) / square) + 1)
+
+  X = get_linspace(-lattice * coeff, lattice * coeff)
+  Y = get_linspace(-lattice * coeff, lattice * coeff)
+  Z = np.zeros((len(X) - 1, len(Y) - 1))
+  Z[:] = np.nan
+
+  for i in range(len(X) - 1):
+    for j in range(len(Y) - 1):
+      Z_vals = data['z'][np.where(
+        (data['x'] >= X[i]) &
+        (data['x'] < X[i + 1]) &
+        (data['y'] >= Y[j]) &
+        (data['y'] < Y[j + 1])
+      )]
+      if len(Z_vals) != 0:
+        Z[i, j] = Z_vals.max()
+
+
+  print(f'calc_surface: - NaN: {np.count_nonzero(np.isnan(Z))}')
+  def check_value(i, j):
+    if i < 0 or j < 0 or i >= len(X) - 1 or j >= len(Y) - 1:
+      return np.nan
+    return Z[i, j]
+
+  for i in range(len(X) - 1):
+    for j in range(len(Y) - 1):
+      if Z[i, j] == 0 or Z[i, j] == np.nan:
+        neighs = [
+          check_value(i - 1, j - 1),
+          check_value(i - 1, j    ),
+          check_value(i - 1, j + 1),
+          check_value(i + 1, j - 1),
+          check_value(i + 1, j    ),
+          check_value(i + 1, j + 1),
+          check_value(i    , j - 1),
+          check_value(i    , j + 1)
+        ]
+        Z[i, j] = np.nanmean(neighs)
+
+  return Z
+
+
+def calc_zero_lvl(input_file: Path) -> float:
+  in_path = Path('in.zero_lvl')
+
+  dump_path = 'dump.temp'
+  dump_str = '"x y z"'
+
+  base_dir = Path('../')
+
+  lammps_run(
+    in_path,
+    [
+      ('input_file', str(input_file)),
+      ('dump_path', str(dump_path)),
+      ('dump_str', dump_str)
+    ],
+    workdir=base_dir
+  )
+
+  dump = Dump(base_dir / dump_path)
+  
+  return dump['z'][:].max()
+
+
+def calc_surface(data: Dump, run_dir: Path, lattice: float, zero_lvl: float):
+    SQUARE = lattice / 2
     COEFF = 5
     VMIN = -20
     VMAX = 10
@@ -125,14 +203,14 @@ def calc_surface(data: Dump, run_dir: Path):
         fig, ax = plt.subplots()
         
         width = len(square) + 1
-        x = np.linspace(0, COEFF * LATTICE * 2, width)
-        y = np.linspace(0, COEFF * LATTICE * 2, width)
+        x = np.linspace(0, COEFF * lattice * 2, width)
+        y = np.linspace(0, COEFF * lattice * 2, width)
         x, y = np.meshgrid(x, y)
         
         ax.set_aspect('equal')
         plt.pcolor(x, y, square, vmin=VMIN, vmax=VMAX, cmap=cm.viridis)
         plt.colorbar()
-        plt.savefig(f"{run_dir / 'surface_2d.pdf'}")
+        plt.savefig(f"{run_dir / 'surface_2d.png'}")
     
     
     def histogram(data, run_dir):
@@ -145,7 +223,7 @@ def calc_surface(data: Dump, run_dir: Path):
         plt.ylabel('Count')
         plt.title('Surface atoms depth distribution')
         plt.grid(True)
-        plt.savefig(f"{run_dir / 'surface_hist.pdf'}")
+        plt.savefig(f"{run_dir / 'surface_hist.png'}")
     
     
     def compute_histogram_bins(data, desired_bin_size):
@@ -157,48 +235,7 @@ def calc_surface(data: Dump, run_dir: Path):
         num_bins = np.linspace(min_boundary, max_boundary, n_bins)
         return num_bins
 
-
-    def get_linspace(left, right):
-        return np.linspace(left, right, round((right - left) / SQUARE) + 1)
-
-
-    X = get_linspace(-LATTICE * COEFF, LATTICE * COEFF)
-    Y = get_linspace(-LATTICE * COEFF, LATTICE * COEFF)
-    Z = np.zeros((len(X) - 1, len(Y) - 1))
-    Z[:] = np.nan
-
-    for i in range(len(X) - 1):
-      for j in range(len(Y) - 1):
-        Z_vals = data['z'][np.where(
-          (data['x'] >= X[i]) &
-          (data['x'] < X[i + 1]) &
-          (data['y'] >= Y[j]) &
-          (data['y'] < Y[j + 1])
-        )]
-        if len(Z_vals) != 0:
-          Z[i, j] = Z_vals.max() - ZERO_LVL
-
-
-    print(f'calc_surface: - NaN: {np.count_nonzero(np.isnan(Z))}')
-    def check_value(i, j):
-      if i < 0 or j < 0 or i >= len(X) - 1 or j >= len(Y) - 1:
-        return np.nan
-      return Z[i, j]
-
-    for i in range(len(X) - 1):
-      for j in range(len(Y) - 1):
-        if Z[i, j] == 0 or Z[i, j] == np.nan:
-          neighs = [
-            check_value(i - 1, j - 1),
-            check_value(i - 1, j    ),
-            check_value(i - 1, j + 1),
-            check_value(i + 1, j - 1),
-            check_value(i + 1, j    ),
-            check_value(i + 1, j + 1),
-            check_value(i    , j - 1),
-            check_value(i    , j + 1)
-          ]
-          Z[i, j] = np.nanmean(neighs)
+    Z = calc_surface_values(data, lattice, COEFF, SQUARE) - zero_lvl
           
     n_X = Z.shape[0]
     X = np.linspace(0, n_X - 1, n_X, dtype=int)
@@ -226,7 +263,7 @@ def calc_surface(data: Dump, run_dir: Path):
     ax.plot_surface(Xs * SQUARE, Ys * SQUARE, Z, vmin=VMIN, vmax=VMAX, cmap=cm.viridis)
     SCALE = 2
     ax.set_zlim3d(-60,15)
-    plt.savefig(f"{run_dir / 'surface_3d.pdf'}")
+    plt.savefig(f"{run_dir / 'surface_3d.png'}")
 
     return sigma
 

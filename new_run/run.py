@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-from pylammpsmpi import LammpsLibrary
 import numpy as np
 from pathlib import Path
 import argparse
@@ -10,11 +9,10 @@ from os import path
 import tempfile
 from typing import List
 
-import matplotlib.pyplot as plt
-from matplotlib import cm
 
 sys.path.append('../')
-from util import Dump, Atom, Cluster, calc_surface, save_table
+import util
+from util import Dump, Atom, Cluster
 
 
 def parse_args():
@@ -96,67 +94,62 @@ def parse_args():
     return parser.parse_args()
 
 
+WORKDIR: Path = Path('../').resolve()
+
 ARGS = parse_args()
 
-OUT_DIR = Path(ARGS.results_dir)
+OUT_DIR: Path = WORKDIR / ARGS.results_dir
 if not OUT_DIR.exists():
     os.mkdir(OUT_DIR)
 
-INPUT_FILE = Path(ARGS.input_file)
-INPUT_DIR = INPUT_FILE.parent
-MOL_FILE = INPUT_DIR / 'mol.C60'
-ELSTOP_TABLE = INPUT_DIR / 'elstop-table.txt'
+INPUT_FILE: Path = Path(ARGS.input_file)
+INPUT_DIR: Path = INPUT_FILE.parent
+MOL_FILE: Path = INPUT_DIR / 'mol.C60'
+ELSTOP_TABLE: Path = INPUT_DIR / 'elstop-table.txt'
 
-SCRIPT_DIR = Path("./")
+SCRIPT_DIR: Path = WORKDIR / "./new_run"
 
-OMP_THREADS = ARGS.omp_threads
-MPI_CORES = ARGS.mpi_cores
+OMP_THREADS: int = ARGS.omp_threads
+MPI_CORES: int = ARGS.mpi_cores
 
-N_RUNS = ARGS.runs
-ENERGY = ARGS.energy
-TEMPERATURE = ARGS.temperature
+N_RUNS: int = ARGS.runs
+ENERGY: float = ARGS.energy
+TEMPERATURE: float = ARGS.temperature
 
-LATTICE = 5.43
-STEP = 1e-3
-SI_TOP = 15.3
+LATTICE: float = 5.43
+STEP: float = 1e-3
+SI_TOP: float = 15.3
 
-C60_X = 0
-C60_Y = 0
-C60_Z_OFFSET = 100
+C60_X: float = 0
+C60_Y: float = 0
+C60_Z_OFFSET: float = 100
 
-IS_ALL_DUMP = True
-ALL_DUMP_INTERVAL = 20
+IS_ALL_DUMP: bool = True
+ALL_DUMP_INTERVAL: int = 20
 
-TMP = Path(tempfile.gettempdir())
+TMP: Path = Path(tempfile.gettempdir())
 
-SI_ATOM_TYPE = 1
-C_ATOM_TYPE = 2
+SI_ATOM_TYPE: int = 1
+C_ATOM_TYPE: int = 2
 
+ZERO_LVL: float = util.calc_zero_lvl(INPUT_FILE)
 
+RUN_TIME: int
 if ARGS.run_time is not None:
     RUN_TIME = ARGS.run_time
 elif ENERGY < 8_000:
     RUN_TIME = 10_000
 else:
-    RUN_TIME = ENERGY * (5 / 4)
-
-if TEMPERATURE == 0:
-    ZERO_LVL = 83.19
-elif TEMPERATURE == 300:
-    ZERO_LVL = 82.4535
-elif TEMPERATURE == 700:
-    ZERO_LVL = 83.391
-elif TEMPERATURE == 1000:
-    ZERO_LVL = 84.0147
+    RUN_TIME = int(ENERGY * (5 / 4))
 
 
-CLUSTERS_TABLE = OUT_DIR / "clusters_table.txt"
-RIM_TABLE = OUT_DIR / "rim_table.txt"
-CARBON_TABLE = OUT_DIR / "carbon_table.txt"
-CRATER_TABLE = OUT_DIR / "crater_table.txt"
-CARBON_DIST = OUT_DIR / "carbon_dist.txt"
-SURFACE_TABLE = OUT_DIR / "surface_table.txt"
-COORD_NUM_TABLE = OUT_DIR / "coord_num_table.txt"
+CLUSTERS_TABLE: Path = OUT_DIR / "clusters_table.txt"
+RIM_TABLE: Path = OUT_DIR / "rim_table.txt"
+CARBON_TABLE: Path = OUT_DIR / "carbon_table.txt"
+CRATER_TABLE: Path = OUT_DIR / "crater_table.txt"
+CARBON_DIST: Path = OUT_DIR / "carbon_dist.txt"
+SURFACE_TABLE: Path = OUT_DIR / "surface_table.txt"
+COORD_NUM_TABLE: Path = OUT_DIR / "coord_num_table.txt"
 
 
 def write_header(header_str, table_path):
@@ -167,19 +160,10 @@ def write_header(header_str, table_path):
 write_header("sim_num N_Si N_C mass Px Py Pz Ek angle", CLUSTERS_TABLE)
 write_header("sim_num N r_mean r_max z_mean z_max", RIM_TABLE)
 write_header("sim_num N r_mean r_max", CARBON_TABLE)
-write_header("sim_num N V S z_mean z_min", CRATER_TABLE)
+#write_header("sim_num N V S z_mean z_min", CRATER_TABLE)
 write_header("z count", CARBON_DIST)
 write_header("sim_num sigma", SURFACE_TABLE)
-write_header("sim_num id Si C Sum", COORD_NUM_TABLE)
-
-
-def set_suffix(lmp):
-    if OMP_THREADS <= 0:
-        lmp.command("package gpu 0")
-        lmp.command("suffix gpu")
-    else:
-        lmp.command(f"package omp {OMP_THREADS}")
-        lmp.command("suffix omp")
+#write_header("sim_num id Si C Sum", COORD_NUM_TABLE)
 
 
 def extract_ids_var(lmp, name, group):
@@ -193,7 +177,7 @@ def extract_ids_var(lmp, name, group):
 def get_cluster_dic(cluster_dump: Dump):
     clusters = cluster_dump['c_clusters']
 
-    cluster_dic = dict()
+    cluster_dic: dict = dict()
     for cluster_id in set(clusters):
         cluster_dic[cluster_id] = []
    
@@ -542,75 +526,57 @@ def carbon_dist_parse(file_path):
     save_table(output_path, table.T, header_str)
 
 
-def main():
-    input_file = INPUT_FILE
-    for i in range(N_RUNS):    
-        lmp = LammpsLibrary(cores=MPI_CORES)
-        
+def main() -> None:
+    input_file: Path = INPUT_FILE
+    for i in range(N_RUNS):
         run_num = i + 1
-        run_dir = OUT_DIR / f"run_{run_num}"
+        run_dir: Path = OUT_DIR / f"run_{run_num}"
         if not run_dir.exists():
             os.mkdir(run_dir)
 
-        lmp.command(f'log {run_dir / "log.lammps"}')
-        set_suffix(lmp)
+        #lmp.command(f'log {run_dir / "log.lammps"}')
 
         def rnd_coord(coord):
             return coord + (np.random.rand() * 2 - 1) * LATTICE * 5
 
-        lmp.variable('input_file', 'index', f'"{input_file}"')
-        lmp.variable('mol_file', 'index', f'"{MOL_FILE}"')
-        lmp.variable('elstop_table', 'index', f'"{ELSTOP_TABLE}"')
-  
-        lmp.variable('lattice', 'index', LATTICE)
-
-        lmp.variable('Si_top', 'index', 83)
-
         fu_x = rnd_coord(C60_X)
         fu_y = rnd_coord(C60_Y)
-        vacs_restart_file = TMP / 'vacs.restart'
 
-        lmp.variable('C60_x', 'index', fu_x)
-        lmp.variable('C60_y', 'index', fu_y)
-        lmp.variable('C60_z_offset', 'index', C60_Z_OFFSET)
+        vacs_restart_file: Path = TMP / 'vacs.restart'
+        dump_cluster_path: Path = run_dir / 'dump.cluster'
+        dump_final_path: Path = run_dir / 'dump.final'
+        write_file = WORKDIR / 'tmp.input.data'
 
-        lmp.variable('step', 'index', STEP)
-        lmp.variable('temperature', 'index', TEMPERATURE)
-        lmp.variable('energy', 'index', ENERGY)
+        vars = [
+            ('input_file', str(input_file)),
+            ('mol_file', str(MOL_FILE)),
+            ('elstop_table', str(ELSTOP_TABLE)),
 
-        lmp.variable('zero_lvl', 'index', ZERO_LVL)
-        lmp.variable('vacs_restart_file', 'index', f'"{vacs_restart_file}"')
+            ('lattice', str(LATTICE)),
+            ('Si_top', str(ZERO_LVL + 0.5)),
 
-        lmp.file(str(SCRIPT_DIR / "in.fall"))
-        if run_num == 1:
-          recalc_zero_lvl(lmp)
+            ('C60_z_offset', str(C60_Z_OFFSET)),
+            ('C60_y', str(fu_y)),
+            ('C60_x', str(fu_x)),
 
-        lmp.command(
-            f'fix temp_time all print 10 "$(time) $(temp)" file {run_dir}/temp_time.txt screen no'
-        )
-        lmp.command(
-            f'fix penrg_time all print 10 "$(time) $(pe)" file {run_dir}/penrg_time.txt screen no'
-        )
-        lmp.run(1000)
-        lmp.unfix('estop')
-        lmp.run(RUN_TIME - 1000)
-        lmp.file(str(SCRIPT_DIR / "in.clusters"))
+            ('step', str(STEP)),
+            ('temperature', str(TEMPERATURE)),
+            ('energy', str(ENERGY)),
+            ('zero_lvl', str(ZERO_LVL)),
+            ('vacs_restart_file', str(vacs_restart_file)),
+            ('run_time', str(RUN_TIME - 1000)),
 
-        dump_cluster_path = run_dir / 'dump.clusters'
-        dump_cluster_str = 'id x y z vx vy vz type c_mass c_clusters c_atom_ke'
-        lmp.command(f'dump clusters clusters custom 1 {dump_cluster_path} {dump_cluster_str}')
+            ('dump_cluster', str(dump_cluster_path.relative_to(WORKDIR))),
+            ('dump_final', str(dump_final_path.relative_to(WORKDIR))),
 
-        dump_final_path = run_dir / 'dump.final'
-        dump_final_str = 'id x y z vx vy vz type c_clusters c_atom_ke'
-        lmp.command(f'dump final all custom 1 {dump_final_path} {dump_final_str}')
-        
-        lmp.run(0)
-        lmp.undump('clusters')
-        lmp.undump('final')
+            ('write_file', str(write_file.relative_to(WORKDIR)))
+        ]
 
-        vac_group_cmd, is_crater = get_vacancies_group_cmd(lmp)
-        dump_cluster = Dump(dump_cluster_path, dump_cluster_str)
-        dump_final = Dump(dump_final_path, dump_final_str)
+        workdir=Path('../')
+        util.lammps_run(Path('new_run/in.fall'), vars, omp_threads=10, mpi_cores=1, workdir=workdir)
+
+        dump_cluster = Dump(dump_cluster_path)
+        dump_final = Dump(dump_final_path)
 
         cluster_dic_atoms, rim_atoms = get_cluster_dic(dump_cluster)
 
@@ -621,100 +587,72 @@ def main():
             for atom in atoms:
                 if atom.type == C_ATOM_TYPE:
                     carbon_sputtered.add(atom.id)
-            cluster_dic[key] = Cluster(cluster_dic_atoms[key])
+            cluster_dic[key] = Cluster(cluster_dic_atoms[key], SI_ATOM_TYPE)
 
         clusters_table = get_clusters_table(cluster_dic, run_num).astype(float)
-        save_table(CLUSTERS_TABLE, clusters_table, mode='a')
+        util.save_table(CLUSTERS_TABLE, clusters_table, mode='a')
 
         rim_info = get_rim_info(rim_atoms, fu_x, fu_y, run_num)
-        save_table(RIM_TABLE, rim_info, mode='a')
+        util.save_table(RIM_TABLE, rim_info, mode='a')
 
         carbon = get_carbon(dump_final, carbon_sputtered)
         carbon_hist = get_carbon_hist(carbon)
-        save_table(CARBON_DIST, carbon_hist, header=str(run_num), mode='a')
+        util.save_table(CARBON_DIST, carbon_hist, header=str(run_num), mode='a')
         carbon_info = get_carbon_info(carbon, fu_x, fu_y, run_num)
-        save_table(CARBON_TABLE, carbon_info, mode='a')
+        util.save_table(CARBON_TABLE, carbon_info, mode='a')
 
+        ids_to_delete = []
         if len(cluster_dic.keys()) != 0:
-            ids_to_delete = []
             for key in cluster_dic_atoms.keys():
                 for atom in cluster_dic_atoms[key]:
                     ids_to_delete.append(atom.id)
-            ids_to_delete = np.array(ids_to_delete)
+            ids_to_delete = list(map(int, ids_to_delete))
 
-            cluster_group_command = "group cluster id " + " ".join(ids_to_delete.astype(int).astype(str))
-            lmp.command(cluster_group_command)
-            lmp.delete_atoms('group', 'cluster')
-        
-        lmp.command("compute coord_num_C C coord/atom cutoff 1.88 group C")
-        lmp.command("compute coord_num_Si C coord/atom cutoff 1.88 group Si")
-        lmp.command('variable coord_num_Sum atom "c_coord_num_C + c_coord_num_Si"')
-        
         dump_final_no_cluster_path = run_dir / 'dump.final_no_cluster'
-        lmp.command(f'dump final all custom 1 {dump_final_no_cluster_path} {dump_final_str}')
-        
-        dump_coord_num_path = run_dir / 'dump.coord_num'
-        dump_coord_num_str = "id c_coord_num_C c_coord_num_Si v_coord_num_Sum"
-        lmp.command(f'dump coord_num C custom 1 {dump_coord_num_path} {dump_coord_num_str}')
-        
-        lmp.run(0)
-        lmp.undump('final')
+        with open(dump_final_path, 'r') as f_in, open(dump_final_no_cluster_path, 'w') as f_out:
+            for line in f_in:
+                cur_id = -1
+                try:
+                    cur_id = int(line.split()[0])
+                except Exception:
+                    pass
 
-        dump_final_no_cluster = Dump(dump_final_no_cluster_path, dump_final_str)
-        dump_coord_num = Dump(dump_coord_num_path, dump_coord_num_str)
-        sigma = calc_surface(dump_final_no_cluster, run_dir)
+                if not cur_id in ids_to_delete:
+                    f_out.write(line)
+
+        dump_final_no_cluster = Dump(dump_final_no_cluster_path)
+        sigma = util.calc_surface(dump_final_no_cluster, run_dir, LATTICE, ZERO_LVL)
         #save_table(run_dir / 'surface_table.txt', surface_data, mode='w')
-        save_table(SURFACE_TABLE, [[run_num, sigma]], mode='a')
+        util.save_table(SURFACE_TABLE, [[run_num, sigma]], mode='a')
 
-        coord_num_table = np.zeros((len(dump_coord_num['id']), 5))
-        coord_num_table[:,0] = run_num
-        coord_num_table[:,1] = dump_coord_num['id']
-        coord_num_table[:,2] = dump_coord_num['c_coord_num_C']
-        coord_num_table[:,3] = dump_coord_num['c_coord_num_Si']
-        coord_num_table[:,4] = dump_coord_num['v_coord_num_Sum']
-        save_table(COORD_NUM_TABLE, coord_num_table, mode='a')
-        
-        lmp.command("unfix tbath")
-        lmp.command("fix tbath nve temp/berendsen ${temperature} ${temperature} 0.001")
-        lmp.run(1000) 
+        #lmp.write_data(f'"{input_file}"')
 
-        lmp.command("unfix tbath")
-        lmp.command("fix tbath thermostat temp/berendsen ${temperature} ${temperature} 0.001")
-        lmp.run(1000)
-
-        input_file = TMP / 'tmp.input.data'
-        lmp.write_data(f'"{input_file}"')
-
-        print("not crashed a")
-
-        lmp.close()
-
-        if (is_crater):
-            lmp = LammpsLibrary(cores=MPI_CORES)
-            print("not crashed b")
+        # if (is_crater):
+        #     lmp = LammpsLibrary(cores=MPI_CORES)
+        #     print("not crashed b")
             
-            lmp.read_restart(f'"{vacs_restart_file}"')
-            lmp.command("pair_style tersoff/zbl\npair_coeff * * SiC.tersoff.zbl Si C\nneighbor 3.0 bin")
-            print("not crashed c")
+        #     lmp.read_restart(f'"{vacs_restart_file}"')
+        #     lmp.command("pair_style tersoff/zbl\npair_coeff * * SiC.tersoff.zbl Si C\nneighbor 3.0 bin")
+        #     print("not crashed c")
        
-            lmp.command(vac_group_cmd)
-            lmp.command("group si_all type 1")
-            lmp.command("compute voro_vol si_all voronoi/atom only_group")
-            lmp.command("compute clusters vac cluster/atom 3")
-            print("not crashed d")
+        #     lmp.command(vac_group_cmd)
+        #     lmp.command("group si_all type 1")
+        #     lmp.command("compute voro_vol si_all voronoi/atom only_group")
+        #     lmp.command("compute clusters vac cluster/atom 3")
+        #     print("not crashed d")
 
-            dump_crater_path = run_dir / 'dump.crater'
-            dump_crater_str = 'id x y z vx vy vz type c_clusters'
-            lmp.command(
-                f"dump clusters vac custom 20 {dump_crater_path} {dump_crater_str}"
-            )
-            lmp.run(0)
+        #     dump_crater_path = run_dir / 'dump.crater'
+        #     dump_crater_str = 'id x y z vx vy vz type c_clusters'
+        #     lmp.command(
+        #         f"dump clusters vac custom 20 {dump_crater_path} {dump_crater_str}"
+        #     )
+        #     lmp.run(0)
 
-            dump_crater = Dump(dump_crater_path, dump_crater_str)
-            crater_info = get_crater_info(lmp, dump_crater, run_num)
-            save_table(CRATER_TABLE, crater_info, mode='a')
+        #     dump_crater = Dump(dump_crater_path, dump_crater_str)
+        #     crater_info = get_crater_info(lmp, dump_crater, run_num)
+        #     save_table(CRATER_TABLE, crater_info, mode='a')
 
-            lmp.close()
+        #     lmp.close()
 
     clusters_parse(CLUSTERS_TABLE)
     clusters_parse_sum(CLUSTERS_TABLE)

@@ -1,13 +1,13 @@
 #!/bin/bash
 
 ./run.py \
-  --omp-threads 0 \
-  --mpi-cores 6 \
+  --omp-threads 4 \
+  --mpi-cores 3 \
   \
   --temperature 300 \
   --energy 8 \
   --runs 300 \
-  --run-time 5000 \
+  --run-time 1100 \
   \
-  --results-dir './res_300_0K_8kev' \
-  --input-file '../input_files/fall300_2.input.data' \
+  --results-dir 'new_run/aaa' \
+  --input-file 'input_files/fall300_2.input.data' \

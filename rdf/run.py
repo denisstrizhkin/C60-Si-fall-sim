@@ -10,14 +10,16 @@ from pathlib import Path
 
 sys.path.append('../')
 import util
+from util import Dump
 
 
-def main():
-  util.lammps_run(Path('./in.coord'), [
-    '-var', 'dump_name', 'test.dump',
-    '-var', 'C_cutoff', '2',
-    '-var', 'Si_cutoff', '2'
-  ], 4, 3)
+def main() -> None:
+  # util.lammps_run(Path('./in.coord'), [
+  #   ('dump_name', 'test.dump'),
+  #   ('C_cutoff', '2'),
+  #   ('Si_cutoff', '2')
+  # ], 4, 3)
+  print(calc_zero_lvl(Path('input_files/fall0.input.data')))
 
 
 if  __name__ == '__main__':
