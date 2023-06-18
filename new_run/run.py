@@ -160,7 +160,7 @@ def write_header(header_str, table_path):
 write_header("sim_num N_Si N_C mass Px Py Pz Ek angle", CLUSTERS_TABLE)
 write_header("sim_num N r_mean r_max z_mean z_max", RIM_TABLE)
 write_header("sim_num N r_mean r_max", CARBON_TABLE)
-#write_header("sim_num N V S z_mean z_min", CRATER_TABLE)
+write_header("sim_num N V S z_mean z_min", CRATER_TABLE)
 write_header("z count", CARBON_DIST)
 write_header("sim_num sigma", SURFACE_TABLE)
 #write_header("sim_num id Si C Sum", COORD_NUM_TABLE)
@@ -307,20 +307,18 @@ def get_carbon_info(carbon, fu_x, fu_y, sim_num):
     return np.array([[sim_num, len(carbon), r.mean(), r.max()]])
 
 
-def get_crater_info(lmp, dump_crater: Dump, sim_num):
+def get_crater_info(dump_crater: Dump, sim_num):
     id = dump_crater['id']
     z = dump_crater['z']
     clusters = dump_crater['c_clusters']
 
-    crater_id = np.bincount(id.astype(int)).argmax()
+    crater_id = np.bincount(clusters.astype(int)).argmax()
     atoms = []
     for i in range(0, len(id)):
         if clusters[i] == crater_id:
             atoms.append(Atom(z = z[i], id = id[i]))
     
-
-    voronoi = lmp.extract_compute("voro_vol", 1, 2, width=2)
-    cell_vol = np.median(voronoi, axis=0)[0]
+    cell_vol = np.median(dump_crater['c_voro_vol[1]'])
     crater_vol = cell_vol * len(atoms)
 
     surface_count = 0
@@ -346,8 +344,6 @@ def get_crater_info(lmp, dump_crater: Dump, sim_num):
             ]
         ]
     )
-
-
 
 
 def clusters_parse(file_path):
@@ -379,7 +375,7 @@ def clusters_parse(file_path):
 
     header_str = "simN\t" + "\t".join(clusters_dic.keys())
     output_path = path.splitext(file_path)[0] + "_parsed" + path.splitext(file_path)[1]
-    save_table(output_path, table, header_str, dtype="d")
+    util.save_table(output_path, table, header_str, dtype="d")
 
 
 def clusters_parse_sum(file_path):
@@ -410,7 +406,7 @@ def clusters_parse_sum(file_path):
             path.splitext(file_path)[0] + "_parsed_sum" + path.splitext(file_path)[1]
     )
 
-    save_table(output_path, table, header_str, dtype="d")
+    util.save_table(output_path, table, header_str, dtype="d")
 
 
 def clusters_parse_angle_dist(file_path):
@@ -450,7 +446,7 @@ def clusters_parse_angle_dist(file_path):
             + "_parsed_number_dist"
             + path.splitext(file_path)[1]
     )
-    save_table(output_path_number, number_table, header_str_number)
+    util.save_table(output_path_number, number_table, header_str_number)
 
     header_str_energy = "angle E1 E2 E3 ... E50"
     output_path_energy = (
@@ -458,7 +454,7 @@ def clusters_parse_angle_dist(file_path):
             + "_parsed_energy_dist"
             + path.splitext(file_path)[1]
     )
-    save_table(output_path_energy, energy_table, header_str_energy)
+    util.save_table(output_path_energy, energy_table, header_str_energy)
 
 
 def carbon_dist_parse(file_path):
@@ -497,7 +493,7 @@ def carbon_dist_parse(file_path):
     header_str = "simN " + " ".join(list(map(str, bins)))
 
     output_path = path.splitext(file_path)[0] + "_parsed" + path.splitext(file_path)[1]
-    save_table(output_path, table.T, header_str)
+    util.save_table(output_path, table.T, header_str)
 
 
 def main() -> None:
@@ -521,6 +517,8 @@ def main() -> None:
         dump_cluster_path: Path = run_dir / 'dump.cluster'
         dump_final_path: Path = run_dir / 'dump.final'
         dump_during_path: Path = run_dir / 'dump.during'
+        dump_crater_path: Path = run_dir / 'dump.crater'
+        dump_crater_id_path: Path = run_dir / 'dump.crater_id'
 
         log_file: Path = run_dir / 'log.lammps'
         write_file = WORKDIR / 'tmp.input.data'
@@ -547,6 +545,7 @@ def main() -> None:
             ('dump_cluster', str(dump_cluster_path.relative_to(WORKDIR))),
             ('dump_final', str(dump_final_path.relative_to(WORKDIR))),
             ('dump_during', str(dump_during_path.relative_to(WORKDIR))),
+            ('dump_crater_id', str(dump_crater_id_path.relative_to(WORKDIR))),
 
             ('write_file', str(write_file.relative_to(WORKDIR)))
         ]
@@ -605,34 +604,21 @@ def main() -> None:
         #save_table(run_dir / 'surface_table.txt', surface_data, mode='w')
         util.save_table(SURFACE_TABLE, [[run_num, sigma]], mode='a')
 
-        #lmp.write_data(f'"{input_file}"')
+        dump_cluster_id = Dump(dump_crater_id_path)
+        if (len(dump_cluster_id['id']) > 0):
+            vac_ids = " ".join(map(str, map(int, dump_cluster_id['id'])))
 
-        # if (is_crater):
-        #     lmp = LammpsLibrary(cores=MPI_CORES)
-        #     print("not crashed b")
-            
-        #     lmp.read_restart(f'"{vacs_restart_file}"')
-        #     lmp.command("pair_style tersoff/zbl\npair_coeff * * SiC.tersoff.zbl Si C\nneighbor 3.0 bin")
-        #     print("not crashed c")
-       
-        #     lmp.command(vac_group_cmd)
-        #     lmp.command("group si_all type 1")
-        #     lmp.command("compute voro_vol si_all voronoi/atom only_group")
-        #     lmp.command("compute clusters vac cluster/atom 3")
-        #     print("not crashed d")
+            util.lammps_run(Path('new_run/in.crater'),
+                [
+                    ('input_file', str(input_file.relative_to(WORKDIR))),
+                    ('dump_crater', str(dump_crater_path.relative_to(WORKDIR))),
+                    ('vac_ids', '"' + vac_ids + '"')
+                ], workdir=workdir
+            )
 
-        #     dump_crater_path = run_dir / 'dump.crater'
-        #     dump_crater_str = 'id x y z vx vy vz type c_clusters'
-        #     lmp.command(
-        #         f"dump clusters vac custom 20 {dump_crater_path} {dump_crater_str}"
-        #     )
-        #     lmp.run(0)
-
-        #     dump_crater = Dump(dump_crater_path, dump_crater_str)
-        #     crater_info = get_crater_info(lmp, dump_crater, run_num)
-        #     save_table(CRATER_TABLE, crater_info, mode='a')
-
-        #     lmp.close()
+            dump_crater = Dump(dump_crater_path)
+            crater_info = get_crater_info(dump_crater, run_num)
+            util.save_table(CRATER_TABLE, crater_info, mode='a')
 
     clusters_parse(CLUSTERS_TABLE)
     clusters_parse_sum(CLUSTERS_TABLE)
