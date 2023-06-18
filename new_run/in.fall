@@ -107,7 +107,7 @@ velocity C60 set NULL NULL ${C60_vel} sum yes units box
 #fix temp_time all print 10 "$(time) $(temp)" file {run_dir}/temp_time.txt screen no
 #fix penrg_time all print 10 "$(time) $(pe)" file {run_dir}/penrg_time.txt screen no
 
-run 500
+run 1000
 unfix estop
 run ${run_time}
 
@@ -123,12 +123,12 @@ run 0
 undump clusters
 undump final
 
-#fix tbath nve temp/berendsen ${temperature} ${temperature} 0.001
-#run 1000 
+fix tbath nve temp/berendsen ${temperature} ${temperature} 0.001
+run 1000 
 
-#unfix tbath
-#fix tbath thermostat temp/berendsen ${temperature} ${temperature} 0.001
-#run 1000
+unfix tbath
+fix tbath thermostat temp/berendsen ${temperature} ${temperature} 0.001
+run 1000
 
 group vac variable is_vacancy static
 write_dump vac custom ${dump_crater_id} id
