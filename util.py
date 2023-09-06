@@ -27,12 +27,12 @@ class Dump:
     def __getitem__(self, key: str):
         if key not in self.keys:
             raise ValueError(f'no such key: {key}')
-       
+
         if len(self.data) == 0:
             return []
 
         return self.data[:, self.keys.index(key)]
-   
+
 
 class Atom:
     def __init__(self, x = 0, y = 0, z = 0, vx = 0, vy = 0, vz = 0, mass = 0, type = 0, id = 0):
@@ -60,7 +60,7 @@ class Cluster:
             self.mx += cluster.vx * cluster.mass
             self.my += cluster.vy * cluster.mass
             self.mz += cluster.vz * cluster.mass
-            self.mass += cluster.mass 
+            self.mass += cluster.mass
 
             if cluster.type == si_atom_type:
                 self.count_Si += 1
@@ -68,7 +68,7 @@ class Cluster:
                 self.count_C += 1
 
         self.ek = 2 * 5.1875 * 1e-5 * (self.mx ** 2 + self.my ** 2 + self.mz ** 2) / (2 * self.mass)
-        
+
         self.angle = np.arctan(self.mz / np.sqrt(self.mx ** 2 + self.my ** 2))
         self.angle = 90 - self.angle * 180 / np.pi
 

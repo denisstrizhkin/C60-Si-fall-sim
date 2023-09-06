@@ -9,8 +9,8 @@
 #
 # variable tdamp equal "100.0"
 
-package omp 8
-suffix omp
+package gpu 0
+suffix gpu
 
 # INIT
 units metal
@@ -94,9 +94,9 @@ thermo_style custom step pe ke etotal temp v_vacs
 dump  d_all all custom 20 all.dump id type x y z vx vy vz
 
 # FIXES
-fix f_nve g_si nve/omp
+fix f_nve g_si nve
 fix extra2 all print 10 "${step} ${top_avrg}" file graph2.txt screen no
 
 thermo_modify lost ignore
-run 500
+run 5000
 write_data output.data

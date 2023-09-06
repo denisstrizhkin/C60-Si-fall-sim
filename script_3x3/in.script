@@ -1,5 +1,5 @@
-package omp 8
-suffix omp
+package gpu 0
+suffix gpu
 
 # INIT
 units metal
@@ -30,10 +30,11 @@ lattice diamond ${lattice} orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
 
 region  r_symbox block ${xl} ${xr} ${yl} ${yr} ${zd} 100.0 units lattice
 create_box 1 r_symbox
-change_box all x scale 3.0 y scale 3.0
+change_box all x scale 5.0 y scale 5.0
 
 variable xl equal "-v_width * 3"
 variable xr equal "v_width * 3"
+variable tdamp equal "100"
 
 variable yl equal "-v_width * 3"
 variable yr equal "v_width * 3"
@@ -48,10 +49,30 @@ read_data input.data add append shift 0.0           -${xy_offset} 0.0
 read_data input.data add append shift +${xy_offset} 0.0           0.0
 read_data input.data add append shift -${xy_offset} 0.0           0.0
 
+read_data input.data add append shift $(v_xy_offset * 2) $(v_xy_offset * 2) 0.0
+read_data input.data add append shift $(v_xy_offset * 2) $(v_xy_offset * 1) 0.0
+read_data input.data add append shift $(v_xy_offset * 2) $(v_xy_offset * 0) 0.0
+read_data input.data add append shift $(v_xy_offset * 2) $(v_xy_offset * -1) 0.0
+read_data input.data add append shift $(v_xy_offset * 2) $(v_xy_offset * -2) 0.0
+
+read_data input.data add append shift $(v_xy_offset * -2) $(v_xy_offset * 2) 0.0
+read_data input.data add append shift $(v_xy_offset * -2) $(v_xy_offset * 1) 0.0
+read_data input.data add append shift $(v_xy_offset * -2) $(v_xy_offset * 0) 0.0
+read_data input.data add append shift $(v_xy_offset * -2) $(v_xy_offset * -1) 0.0
+read_data input.data add append shift $(v_xy_offset * -2) $(v_xy_offset * -2) 0.0
+
+read_data input.data add append shift $(v_xy_offset * -1) $(v_xy_offset * 2) 0.0
+read_data input.data add append shift $(v_xy_offset * 0) $(v_xy_offset * 2) 0.0
+read_data input.data add append shift $(v_xy_offset * 1) $(v_xy_offset * 2) 0.0
+
+read_data input.data add append shift $(v_xy_offset * -1) $(v_xy_offset * -2) 0.0
+read_data input.data add append shift $(v_xy_offset * 0) $(v_xy_offset * -2) 0.0
+read_data input.data add append shift $(v_xy_offset * 1) $(v_xy_offset * -2) 0.0
+
 # CREATE ATOMS
 variable zf equal "-v_depth + 0.25"
 
-region  r_si_fix block ${xl} ${xr} ${yl} ${yr} ${zd} ${zf} units lattice
+region  r_si_fix block EDGE EDGE EDGE EDGE ${zd} ${zf} units lattice
 
 region  r_top    block ${xl} ${xr} ${yl} ${yr} 15.0 15.5 units lattice
 
@@ -98,7 +119,7 @@ thermo_style custom step pe ke etotal temp v_vacs
 dump  d_all all custom 20 all.dump id type x y z vx vy vz
 
 # FIXES
-fix f_nve g_si nve/omp
+fix f_norm g_si nvt temp 1000 1000 $(v_tdamp*dt)
 fix extra2 all print 10 "${step} ${top_avrg}" file graph2.txt screen no
 
 run 5000
