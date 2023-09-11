@@ -1,0 +1,84 @@
+package gpu 0
+suffix gpu
+#package omp 1
+
+# INIT
+units metal
+dimension 3
+boundary p p f
+atom_style atomic
+atom_modify map yes
+
+# SET LATTICE
+lattice diamond 5.43 orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
+
+# CREATE SYMULATION BOX
+variable width equal "4"
+variable depth equal "16"
+variable top equal "15.3"
+variable start_temp equal "1"
+variable end_temp   equal "1000"
+variable tdamp equal "100"
+variable heat_time equal "1 * 1000 * 1000"
+
+region symbox block -${width} ${width} -${width} ${width} -${depth} ${depth} units lattice
+create_box 1 symbox
+
+# CREATE ATOMS
+region si_all block -${width} ${width} -${width} ${width} -${depth} 0               units lattice
+region si_fix block -${width} ${width} -${width} ${width} -${depth} $(-v_depth+0.5) units lattice
+
+region top block -${width} ${width} -${width} ${width} -0.2 0 units lattice
+create_atoms 1 region si_all
+mass 1 28.08553
+
+# POTENTIALS
+pair_style tersoff/zbl
+pair_coeff * * potentials/SiC.tersoff.zbl Si
+neighbor 13.0 bin
+
+# GROUPS
+group si_all type 1
+group si_fix region si_fix
+
+group top region top
+
+group nve subtract si_all si_fix
+
+# VORONOI
+compute voro si_all voronoi/atom occupation only_group
+
+variable is_vac atom "c_voro[1]==0"
+compute vac_sum si_all reduce sum v_is_vac
+variable vacs equal "c_vac_sum"
+
+# COMPUTE TOP
+compute top_sum top reduce sum z
+variable top_num equal count(top)
+variable top_avrg equal "c_top_sum / v_top_num"
+variable step equal "step"
+
+# SET START CONDITIONS
+minimize 1e-20 1e-20 1000 1000
+velocity nve create ${start_temp} 4928459 dist gaussian
+timestep 0.001
+
+# FIXES
+#fix extra1 all print 10 "${step} ${top_avrg}" file graph1.txt screen no
+fix f_norm nve nvt temp ${start_temp} ${end_temp} $(v_tdamp*dt)
+
+# THERMO
+reset_timestep 0
+thermo 50
+thermo_style custom step pe ke etotal temp v_vacs
+
+# RUN HEAT
+run ${heat_time}
+
+# FIXES
+unfix f_norm
+fix f_nve nve nve
+fix extra2 all print 10 "${step} ${top_avrg}" file graph2.txt screen no
+
+run 1000
+write_data output.data

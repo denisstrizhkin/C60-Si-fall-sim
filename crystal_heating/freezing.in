@@ -1,0 +1,74 @@
+package gpu 0
+suffix gpu
+#package omp 1
+
+# INIT
+units metal
+dimension 3
+boundary p p f
+atom_style atomic
+atom_modify map yes
+read_data ./fall_2.input.data
+
+# SET LATTICE
+lattice diamond 5.43 orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
+
+# CREATE SYMULATION BOX
+variable top equal "15.3"
+variable width equal "20"
+variable depth equal "16"
+variable fixed equal "-v_depth + 0.5"
+variable start_temp equal "700"
+variable end_temp equal "1e-6"
+variable tdamp equal "0.001"
+variable heat_time equal "1000 * 1000"
+
+# CREATE ATOMS
+region si_fix block -${width} ${width} -${width} ${width} -${depth} ${fixed} units lattice
+
+
+region floor block -${width} ${width} -${width} ${width} ${fixed} $(v_fixed + 1)
+region x_left block -${width} $(-v_width + 1) -${width} ${width} ${fixed} ${top}
+region x_right block $(v_width - 1) ${width} -${width} ${width} ${fixed} ${top}
+region y_left block -${width} ${width} -${width} $(-v_width + 1) ${fixed} ${top}
+region y_right block -${width} ${width} $(v_width - 1) ${width} ${fixed} ${top}
+
+region bath union 5 floor x_right x_left y_right y_left
+
+# POTENTIALS
+pair_style tersoff/zbl
+pair_coeff * * potentials/SiC.tersoff.zbl Si
+neighbor 3.0 bin
+
+# GROUPS
+group si_all type 1
+group si_fix region si_fix
+
+group bath region bath
+
+group nve subtract si_all si_fix
+
+# VORONOI
+compute voro si_all voronoi/atom occupation only_group
+compute atom_ke all ke/atom
+
+variable is_vac atom "c_voro[1]==0"
+compute vac_sum si_all reduce sum v_is_vac
+variable vacs equal "c_vac_sum"
+
+timestep 0.001
+
+# FIXES
+fix extra1 all print 10 "$(time) $(temp)" file graph1.txt screen no
+fix nve nve nve
+fix bath bath temp/berendsen ${start_temp} ${end_temp} $(v_tdamp)
+
+# THERMO
+reset_timestep 0
+thermo 50
+thermo_style custom step pe ke etotal time temp v_vacs
+
+dump 1 all custom 1000 all.dump x y z c_atom_ke
+
+# RUN HEAT
+run ${heat_time}
