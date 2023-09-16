@@ -10,7 +10,7 @@ atom_modify map yes
 
 # CREATE SYMULATION BOX
 variable width equal 4
-variable depth equal 16
+variable depth equal 80
 
 variable xl equal "-v_width"
 variable xr equal "v_width"
@@ -28,7 +28,7 @@ variable z_offset equal "v_depth * v_lattice + 2.0"
 # SET LATTICE
 lattice diamond ${lattice} orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
 
-region  r_symbox block ${xl} ${xr} ${yl} ${yr} ${zd} 100.0 units lattice
+region r_symbox block ${xl} ${xr} ${yl} ${yr} ${zd} 1000.0 units lattice
 create_box 1 r_symbox
 change_box all x scale 5.0 y scale 5.0
 
@@ -69,58 +69,33 @@ read_data input.data add append shift $(v_xy_offset * -1) $(v_xy_offset * -2) 0.
 read_data input.data add append shift $(v_xy_offset * 0) $(v_xy_offset * -2) 0.0
 read_data input.data add append shift $(v_xy_offset * 1) $(v_xy_offset * -2) 0.0
 
-# CREATE ATOMS
-variable zf equal "-v_depth + 0.25"
-
-region  r_si_fix block EDGE EDGE EDGE EDGE ${zd} ${zf} units lattice
-
-region  r_top    block ${xl} ${xr} ${yl} ${yr} 15.0 15.5 units lattice
-
-mass 1 28.08553
+write_data output.data
 
 # POTENTIALS
 pair_style tersoff/zbl
 pair_coeff * * potentials/SiC.tersoff.zbl Si
-neighbor 3.0 bin
+neighbor 5.0 bin
+
+# REGIONS
+region si_fix block EDGE EDGE EDGE EDGE EDGE $(v_zd+0.5) units lattice
 
 # GROUPS
-group g_si_all type 1
-group g_si_fix region r_si_fix
-
-group g_top region r_top
-
-group g_si subtract g_si_all g_si_fix
-
-# MINIMIZE
-# minimize 1e-8 1e-8 1000 1000
-
-# VORONOI
-compute voro g_si voronoi/atom occupation only_group
-
-variable is_vac atom "c_voro[1]==0"
-compute vac_sum g_si reduce sum v_is_vac
-variable vacs equal "c_vac_sum"
-
-# COMPUTE TOP
-compute top_sum g_top reduce sum z
-variable top_num equal count(g_top)
-variable top_avrg equal "c_top_sum / v_top_num"
-variable step equal "step"
-
-# SET START CONDITIONS
-timestep 0.001
-
-# THERMO
-reset_timestep 0
-thermo 50
-thermo_style custom step pe ke etotal temp v_vacs
-
-# RUN HEAT
-dump  d_all all custom 20 all.dump id type x y z vx vy vz
+group si_all type 1
+group si_fix region si_fix
+group nve subtract si_all si_fix
 
 # FIXES
-fix f_norm g_si nvt temp 1000 1000 $(v_tdamp*dt)
-fix extra2 all print 10 "${step} ${top_avrg}" file graph2.txt screen no
+fix f_nve nve nve
 
-run 5000
-write_data output.data
+# DUMPS
+dump d_all all custom 20 all.dump id type x y z vx vy vz
+
+# RUN SETUP
+reset_timestep 0
+timestep 0.001
+
+thermo 50
+thermo_style custom step pe ke etotal temp
+
+# RUN
+run 1000
