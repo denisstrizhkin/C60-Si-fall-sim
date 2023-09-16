@@ -9,8 +9,8 @@ atom_style atomic
 atom_modify map yes
 
 # CREATE SYMULATION BOX
-variable width equal 20
-variable depth equal 80
+variable width equal "80 / 2"
+variable depth equal 16
 
 variable xl equal "-v_width"
 variable xr equal "v_width"
