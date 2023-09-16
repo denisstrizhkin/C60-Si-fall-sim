@@ -39,16 +39,17 @@ write_restart ${vacs_restart_file}
 
 ### potentials ###
 
-#pair_style tersoff/zbl
-#pair_coeff * * SiC.tersoff.zbl Si C
-#neighbor 2.5 bin
-#neigh_modify one 4000
+pair_style tersoff/zbl
+pair_coeff * * SiC.tersoff.zbl Si C
+neighbor 0.0 bin
+neigh_modify every 5 delay 0 check no
 
-pair_style  hybrid airebo 3.0 tersoff/zbl
-pair_coeff  * * tersoff/zbl SiC.tersoff.zbl Si C
-pair_coeff  2 2 none
-pair_coeff  * * airebo CH.airebo NULL C
-neighbor    3.0 bin
+# pair_style  hybrid airebo 3.0 tersoff/zbl
+# pair_coeff  * * tersoff/zbl SiC.tersoff.zbl Si C
+# pair_coeff  2 2 none
+# pair_coeff  * * airebo CH.airebo NULL C
+# neighbor    3.0 bin
+
 
 ### C60 molecule ###
 molecule C60 ${mol_file}

@@ -504,8 +504,6 @@ def main() -> None:
         if not run_dir.exists():
             os.mkdir(run_dir)
 
-        #lmp.command(f'log {run_dir / "log.lammps"}')
-
         def rnd_coord(coord):
             return coord + (np.random.rand() * 2 - 1) * LATTICE * 5
 
@@ -552,7 +550,8 @@ def main() -> None:
 
         workdir=Path('../')
         util.lammps_run(Path('new_run/in.fall'), vars, omp_threads=OMP_THREADS, mpi_cores=MPI_CORES, workdir=workdir, log_file=log_file.relative_to(WORKDIR))
-        input_file = write_file
+        # TODO do something about this already
+        # input_file = write_file
 
         dump_cluster = Dump(dump_cluster_path)
         dump_final = Dump(dump_final_path)

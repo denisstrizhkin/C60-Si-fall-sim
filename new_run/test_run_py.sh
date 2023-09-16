@@ -1,13 +1,13 @@
 #!/bin/bash
 
 ./run.py \
-  --omp-threads 4 \
-  --mpi-cores 3 \
+  --omp-threads 0 \
+  --mpi-cores 10 \
   \
-  --temperature 300 \
+  --temperature 0 \
   --energy 8 \
-  --runs 300 \
-  --run-time 1100 \
+  --runs 50 \
+  --run-time 5000 \
   \
-  --results-dir 'new_run/aaa' \
-  --input-file 'input_files/fall300_2.input.data' \
+  --results-dir 'new_run/tersoff_single_8keV_0K_80_80_95' \
+  --input-file 'input_files/fall_0K_80_80_95.input.data' \
