@@ -117,6 +117,100 @@ Save final crystal
 write_data output.data
 ```
 
+## Lateral duplication
+
+Setting up simulation variable
+```
+variable xl equal "-v_width"
+variable xr equal "v_width"
+
+variable yl equal "-v_width"
+variable yr equal "v_width"
+
+variable zd equal "-v_depth"
+
+variable lattice equal "5.43"
+
+variable xy_offset equal "v_width * 2.0 * v_lattice"
+variable z_offset equal "v_depth * v_lattice + 2.0"
+```
+
+Creating simulation box
+```
+lattice diamond ${lattice} orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
+
+region r_symbox block ${xl} ${xr} ${yl} ${yr} ${zd} 1000.0 units lattice
+create_box 1 r_symbox
+change_box all x scale 5.0 y scale 5.0
+```
+
+### Adjusting variables
+
+2x2
+```
+```
+
+3x3
+```
+```
+
+5x5
+```
+variable xl equal "-v_width * 3"
+variable xr equal "v_width * 3"
+
+variable yl equal "-v_width * 3"
+variable yr equal "v_width * 3"
+```
+
+### Duplication
+
+2x2
+```
+```
+
+3x3
+```
+```
+
+5x5
+```
+read_data input.data add merge
+read_data input.data add append shift +${xy_offset} +${xy_offset} 0.0
+read_data input.data add append shift -${xy_offset} +${xy_offset} 0.0
+read_data input.data add append shift -${xy_offset} -${xy_offset} 0.0
+read_data input.data add append shift +${xy_offset} -${xy_offset} 0.0
+read_data input.data add append shift 0.0           +${xy_offset} 0.0
+read_data input.data add append shift 0.0           -${xy_offset} 0.0
+read_data input.data add append shift +${xy_offset} 0.0           0.0
+read_data input.data add append shift -${xy_offset} 0.0           0.0
+
+read_data input.data add append shift $(v_xy_offset * 2) $(v_xy_offset * 2) 0.0
+read_data input.data add append shift $(v_xy_offset * 2) $(v_xy_offset * 1) 0.0
+read_data input.data add append shift $(v_xy_offset * 2) $(v_xy_offset * 0) 0.0
+read_data input.data add append shift $(v_xy_offset * 2) $(v_xy_offset * -1) 0.0
+read_data input.data add append shift $(v_xy_offset * 2) $(v_xy_offset * -2) 0.0
+
+read_data input.data add append shift $(v_xy_offset * -2) $(v_xy_offset * 2) 0.0
+read_data input.data add append shift $(v_xy_offset * -2) $(v_xy_offset * 1) 0.0
+read_data input.data add append shift $(v_xy_offset * -2) $(v_xy_offset * 0) 0.0
+read_data input.data add append shift $(v_xy_offset * -2) $(v_xy_offset * -1) 0.0
+read_data input.data add append shift $(v_xy_offset * -2) $(v_xy_offset * -2) 0.0
+
+read_data input.data add append shift $(v_xy_offset * -1) $(v_xy_offset * 2) 0.0
+read_data input.data add append shift $(v_xy_offset * 0) $(v_xy_offset * 2) 0.0
+read_data input.data add append shift $(v_xy_offset * 1) $(v_xy_offset * 2) 0.0
+
+read_data input.data add append shift $(v_xy_offset * -1) $(v_xy_offset * -2) 0.0
+read_data input.data add append shift $(v_xy_offset * 0) $(v_xy_offset * -2) 0.0
+read_data input.data add append shift $(v_xy_offset * 1) $(v_xy_offset * -2) 0.0
+```
+
+Save output
+```
+write_data output.data
+```
+
 ## 80x80x96
 
 ### 0K
