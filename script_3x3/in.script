@@ -9,7 +9,7 @@ atom_style atomic
 atom_modify map yes
 
 # CREATE SYMULATION BOX
-variable width equal 4
+variable width equal 20
 variable depth equal 80
 
 variable xl equal "-v_width"
@@ -23,58 +23,28 @@ variable zd equal "-v_depth"
 variable lattice equal "5.43"
 
 variable xy_offset equal "v_width * 2.0 * v_lattice"
-variable z_offset equal "v_depth * v_lattice + 2.0"
 
 # SET LATTICE
 lattice diamond ${lattice} orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
 
 region r_symbox block ${xl} ${xr} ${yl} ${yr} ${zd} 1000.0 units lattice
 create_box 1 r_symbox
-change_box all x scale 5.0 y scale 5.0
 
-variable xl equal "-v_width * 3"
-variable xr equal "v_width * 3"
-variable tdamp equal "100"
+# DUPLICATE
+change_box all x scale 2.0 y scale 2.0
 
-variable yl equal "-v_width * 3"
-variable yr equal "v_width * 3"
-
-read_data input.data add merge
-read_data input.data add append shift +${xy_offset} +${xy_offset} 0.0
-read_data input.data add append shift -${xy_offset} +${xy_offset} 0.0
-read_data input.data add append shift -${xy_offset} -${xy_offset} 0.0
-read_data input.data add append shift +${xy_offset} -${xy_offset} 0.0
-read_data input.data add append shift 0.0           +${xy_offset} 0.0
-read_data input.data add append shift 0.0           -${xy_offset} 0.0
-read_data input.data add append shift +${xy_offset} 0.0           0.0
-read_data input.data add append shift -${xy_offset} 0.0           0.0
-
-read_data input.data add append shift $(v_xy_offset * 2) $(v_xy_offset * 2) 0.0
-read_data input.data add append shift $(v_xy_offset * 2) $(v_xy_offset * 1) 0.0
-read_data input.data add append shift $(v_xy_offset * 2) $(v_xy_offset * 0) 0.0
-read_data input.data add append shift $(v_xy_offset * 2) $(v_xy_offset * -1) 0.0
-read_data input.data add append shift $(v_xy_offset * 2) $(v_xy_offset * -2) 0.0
-
-read_data input.data add append shift $(v_xy_offset * -2) $(v_xy_offset * 2) 0.0
-read_data input.data add append shift $(v_xy_offset * -2) $(v_xy_offset * 1) 0.0
-read_data input.data add append shift $(v_xy_offset * -2) $(v_xy_offset * 0) 0.0
-read_data input.data add append shift $(v_xy_offset * -2) $(v_xy_offset * -1) 0.0
-read_data input.data add append shift $(v_xy_offset * -2) $(v_xy_offset * -2) 0.0
-
-read_data input.data add append shift $(v_xy_offset * -1) $(v_xy_offset * 2) 0.0
-read_data input.data add append shift $(v_xy_offset * 0) $(v_xy_offset * 2) 0.0
-read_data input.data add append shift $(v_xy_offset * 1) $(v_xy_offset * 2) 0.0
-
-read_data input.data add append shift $(v_xy_offset * -1) $(v_xy_offset * -2) 0.0
-read_data input.data add append shift $(v_xy_offset * 0) $(v_xy_offset * -2) 0.0
-read_data input.data add append shift $(v_xy_offset * 1) $(v_xy_offset * -2) 0.0
+read_data input.data add merge  shift $(v_xy_offset * 0.5)  $(v_xy_offset * 0.5)  0.0
+read_data input.data add append shift $(v_xy_offset * -0.5) $(v_xy_offset * 0.5)  0.0
+read_data input.data add append shift $(v_xy_offset * 0.5)  $(v_xy_offset * -0.5) 0.0
+read_data input.data add append shift $(v_xy_offset * -0.5) $(v_xy_offset * -0.5) 0.0
 
 write_data output.data
 
 # POTENTIALS
 pair_style tersoff/zbl
 pair_coeff * * potentials/SiC.tersoff.zbl Si
-neighbor 5.0 bin
+neighbor 0.0 bin
+neigh_modify every 5 delay 0 check no
 
 # REGIONS
 region si_fix block EDGE EDGE EDGE EDGE EDGE $(v_zd+0.5) units lattice
@@ -88,7 +58,7 @@ group nve subtract si_all si_fix
 fix f_nve nve nve
 
 # DUMPS
-dump d_all all custom 20 all.dump id type x y z vx vy vz
+dump d_all all custom 10 all.dump id type x y z vx vy vz
 
 # RUN SETUP
 reset_timestep 0
@@ -98,4 +68,4 @@ thermo 50
 thermo_style custom step pe ke etotal temp
 
 # RUN
-run 1000
+run 100
