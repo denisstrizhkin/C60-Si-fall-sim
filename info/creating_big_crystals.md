@@ -1,0 +1,11 @@
+# Creating Big Crystals
+
+## 80x80x96
+
+### 0K
+
+### Heated (1000k)
+
+## 160x160x32
+
+## 160x160x96
