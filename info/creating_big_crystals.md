@@ -202,7 +202,18 @@ write_data output.data
 
 ### 0K
 
+```
+variable width equal "4"
+variable depth equal "80"
 
+variable top equal "15.3"
+
+variable start_temp equal "1e-6"
+variable end_temp   equal "1e-6"
+
+variable tdamp equal "100"
+variable heat_time equal "1 * 1000 * 1000"
+```
 
 ### Heated (1000k)
 
