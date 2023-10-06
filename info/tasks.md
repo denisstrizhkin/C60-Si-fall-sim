@@ -18,6 +18,10 @@
 - [x] задача А *(сделали)*
 - [ ] задача B *(в процессе)*
 
+## Ссылочки
+
+- [Введение - надо сделать](https://docs.google.com/document/d/1D2eHLKL9szqp-qkxDXQDNU6F7hDbyzQzNPP4WrA9qns/edit?usp=sharing)
+
 ## Посчитать Airebo (одиночные)
      
 ## Посчитать Tersoff/ZBL
