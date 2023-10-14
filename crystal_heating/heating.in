@@ -13,8 +13,8 @@ atom_modify map yes
 lattice diamond 5.43 orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
 
 # VARIABLES
-variable width equal "4"
-variable depth equal "80"
+variable width equal "15"
+variable depth equal "16"
 
 variable top equal "15.3"
 
@@ -22,7 +22,7 @@ variable start_temp equal "1e-6"
 variable end_temp   equal "1e-6"
 
 variable tdamp equal "100"
-variable heat_time equal "1 * 1000 * 1000"
+variable heat_time equal "1 * 100 * 1000"
 
 # CREATE SIMULATION BOX
 region symbox block -${width} ${width} -${width} ${width} -${depth} ${depth} units lattice
@@ -41,7 +41,7 @@ mass 1 28.08553
 # POTENTIALS
 pair_style tersoff/zbl
 pair_coeff * * potentials/SiC.tersoff.zbl Si
-neighbor 13.0 bin
+neighbor 3.0 bin
 
 # GROUPS
 group si_all type 1

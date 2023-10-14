@@ -1,5 +1,7 @@
 *.lammps
-dump.*
 results
 .vscode
 *__pycache__*
+input_files
+*.data
+*.dump
