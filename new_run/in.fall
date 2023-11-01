@@ -8,7 +8,6 @@ atom_modify map yes
 read_data ${input_file}
 balance 1.0 shift xyz 10 1.0
 
-
 ### variables ###
 variable fixed_width equal '0.5 * v_lattice'
 variable bath_floor_top equal 'zlo + 1 + v_fixed_width'
@@ -32,6 +31,8 @@ lattice diamond ${lattice} orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
 # region y_left  block EDGE                          EDGE                          EDGE                          $(ylo + ylat + v_fixed_width) ${Si_fixed_top} ${Si_top}              units box
 # region y_right block EDGE                          EDGE                          $(yhi - ylat - v_fixed_width) EDGE                          ${Si_fixed_top} ${Si_top}              units box
 
+region e_stop block EDGE EDGE EDGE EDGE EDGE $(v_zero_lvl + 5) units box
+
 region Si_fixed block EDGE EDGE EDGE EDGE EDGE ${Si_fixed_top} units box
 
 region floor   block EDGE          EDGE          EDGE          EDGE          ${Si_fixed_top} ${bath_floor_top} units box
@@ -54,8 +55,9 @@ write_restart ${vacs_restart_file}
 
 pair_style tersoff/zbl
 pair_coeff * * SiC.tersoff.zbl Si C
-neighbor 0.0 bin
-neigh_modify every 5 delay 0 check no
+neigh_modify every 1 delay 0 check no
+neigh_modify binsize 5
+neigh_modify one 4000
 
 # pair_style  hybrid airebo 3.0 tersoff/zbl
 # pair_coeff  * * tersoff/zbl SiC.tersoff.zbl Si C
@@ -106,20 +108,20 @@ compute sputter_c   C   reduce sum v_is_sputtered
 ### thermo ###
 reset_timestep 0
 timestep ${step}
-thermo 25
+thermo 10
 thermo_style custom step pe ke etotal temp c_vacancies dt time c_sputter_all c_sputter_c c_sputter_si
 
 
 ### fixes ###
-fix balance all balance 100 1.0 shift xyz 10 1.0
+fix balance all balance 20 1.0 shift xyz 10 1.0
 fix nve nve nve
 fix tbath thermostat temp/berendsen ${temperature} ${temperature} 0.001
-fix estop all electron/stopping 10.0 ${elstop_table}
-fix dt all dt/reset 1 $(v_step/10) ${step} 0.1
+fix estop all electron/stopping 10.0 ${elstop_table} region e_stop
+fix dt all dt/reset 1 $(v_step/2) ${step} 0.1
 
 
 ### dumps ###
-dump during all custom 20 ${dump_during} id type x y z c_atom_ke
+# dump during all custom 10 ${dump_during} id type x y z c_atom_ke
 
 
 ### run simulation ###
@@ -130,6 +132,7 @@ velocity C60 set NULL NULL ${C60_vel} sum yes units box
 
 run 1000
 unfix estop
+
 run ${run_time}
 
 group clusters variable is_sputtered
