@@ -133,7 +133,7 @@ run 100
 if "$(time) < 1" then "jump SELF run_a"
 
 unfix estop
-unfix dt_reset
+unfix dt
 group dt_reset delete
 
 # label run_b
