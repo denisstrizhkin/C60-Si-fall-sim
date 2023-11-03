@@ -92,7 +92,7 @@ def lammps_run(
   if (omp_threads <= 0):
     args = mpirun_base + [
       '-sf', 'gpu',
-      '-pk', 'gpu', '0', 'pair/only', 'on',
+      '-pk', 'gpu', '0',
     ]
     run_args = docker_base + [
       '--gpus', 'all',
