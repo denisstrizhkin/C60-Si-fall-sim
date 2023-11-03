@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 import sys
 import os
-import shutil
 import subprocess
 import time
 
@@ -93,11 +92,11 @@ def lammps_run(
   if (omp_threads <= 0):
     args = mpirun_base + [
       '-sf', 'gpu',
-      '-pk', 'gpu', '0',
+      '-pk', 'gpu', '0', 'pair/only', 'on',
     ]
     run_args = docker_base + [
       '--gpus', 'all',
-      'lammpsopencl'
+      'lammpscuda'
     ]
   else:
     args = mpirun_base + [
@@ -108,12 +107,14 @@ def lammps_run(
       'lammpsmpi'
     ]
 
-  vars_str: str = ''
-  if len(vars) != 0:
-    vars_str = ' -var ' + ' -var '.join(map(lambda x: f'{x[0]} {x[1]}', vars))
-
+  vars_list = [ ]      
+  for var in vars:
+    vars_list.append('-var')
+    vars_list.append(var[0])
+    vars_list.append(var[1])
+                  
   print('lammps_run:', args)
-  run_args = run_args + [ ' '.join(args) + vars_str + f' -log {log_file}' ]
+  run_args = args + vars_list + [ '-log', f'{log_file}' ]
   print('lammps_run:', run_args)
 
   process = subprocess.Popen(run_args, encoding='utf-8')
@@ -170,11 +171,9 @@ def calc_surface_values(data: Dump, lattice: float, coeff: float, square: float)
   return Z
 
 
-def calc_zero_lvl(input_file: Path) -> float:
-  in_path = Path('in.zero_lvl')
-
+def calc_zero_lvl(input_file: Path, in_path: Path) -> float:
   dump_path = 'dump.temp'
-  dump_str = '"x y z"'
+  dump_str = 'x y z'
 
   base_dir = Path('../')
 

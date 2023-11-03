@@ -25,7 +25,7 @@ def parse_args():
         action="store",
         required=False,
         default=700,
-        type=int,
+        type=float,
         help="Set temperature of the simulation. (K)",
     )
 
@@ -94,7 +94,7 @@ def parse_args():
     return parser.parse_args()
 
 
-WORKDIR: Path = Path('../').resolve()
+WORKDIR: Path = Path('../')
 
 ARGS = parse_args()
 
@@ -132,7 +132,7 @@ TMP: Path = Path(tempfile.gettempdir())
 SI_ATOM_TYPE: int = 1
 C_ATOM_TYPE: int = 2
 
-ZERO_LVL: float = util.calc_zero_lvl(INPUT_FILE)
+ZERO_LVL: float = util.calc_zero_lvl(WORKDIR / INPUT_FILE, WORKDIR / 'in.zero_lvl')
 
 RUN_TIME: int
 if ARGS.run_time is not None:
@@ -521,10 +521,11 @@ def main() -> None:
         log_file: Path = run_dir / 'log.lammps'
         write_file = WORKDIR / 'tmp.input.data'
 
+        print(input_file)
         vars = [
-            ('input_file', str(input_file.relative_to(WORKDIR))),
-            ('mol_file', str(MOL_FILE)),
-            ('elstop_table', str(ELSTOP_TABLE)),
+            ('input_file', str(input_file)),
+            ('mol_file', str(WORKDIR / MOL_FILE)),
+            ('elstop_table', str(WORKDIR / ELSTOP_TABLE)),
 
             ('lattice', str(LATTICE)),
             ('Si_top', str(ZERO_LVL + 0.5)),
@@ -540,16 +541,21 @@ def main() -> None:
             ('vacs_restart_file', str(vacs_restart_file)),
             ('run_time', str(RUN_TIME - 1000)),
 
-            ('dump_cluster', str(dump_cluster_path.relative_to(WORKDIR))),
-            ('dump_final', str(dump_final_path.relative_to(WORKDIR))),
-            ('dump_during', str(dump_during_path.relative_to(WORKDIR))),
-            ('dump_crater_id', str(dump_crater_id_path.relative_to(WORKDIR))),
+            ('dump_cluster', str(dump_cluster_path)),
+            ('dump_final', str(dump_final_path)),
+            ('dump_during', str(dump_during_path)),
+            ('dump_crater_id', str(dump_crater_id_path)),
 
-            ('write_file', str(write_file.relative_to(WORKDIR)))
+            ('write_file', str(write_file))
         ]
 
         workdir=Path('../')
-        util.lammps_run(Path('new_run/in.fall'), vars, omp_threads=OMP_THREADS, mpi_cores=MPI_CORES, workdir=workdir, log_file=log_file.relative_to(WORKDIR))
+        util.lammps_run(
+            WORKDIR / 'new_run/in.fall',
+            vars, omp_threads=OMP_THREADS,
+            mpi_cores=MPI_CORES, workdir=workdir,
+            log_file=log_file
+        )
         # TODO do something about this already
         # input_file = write_file
 
@@ -607,11 +613,11 @@ def main() -> None:
         if (len(dump_cluster_id['id']) > 0):
             vac_ids = " ".join(map(str, map(int, dump_cluster_id['id'])))
 
-            util.lammps_run(Path('new_run/in.crater'),
+            util.lammps_run(WORKDIR / 'new_run/in.crater',
                 [
-                    ('input_file', str(input_file.relative_to(WORKDIR))),
-                    ('dump_crater', str(dump_crater_path.relative_to(WORKDIR))),
-                    ('vac_ids', '"' + vac_ids + '"')
+                    ('input_file', input_file),
+                    ('dump_crater', dump_crater_path),
+                    ('vac_ids', vac_ids)
                 ], workdir=workdir
             )
 
