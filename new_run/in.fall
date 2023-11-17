@@ -31,8 +31,8 @@ lattice diamond ${lattice} orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
 # region y_left  block EDGE                          EDGE                          EDGE                          $(ylo + ylat + v_fixed_width) ${Si_fixed_top} ${Si_top}              units box
 # region y_right block EDGE                          EDGE                          $(yhi - ylat - v_fixed_width) EDGE                          ${Si_fixed_top} ${Si_top}              units box
 
-region e_stop block EDGE EDGE EDGE EDGE EDGE $(v_zero_lvl + 5) units box
-region dt_reset block EDGE EDGE EDGE EDGE EDGE $(v_zero_lvl + 30) units box
+region e_stop block EDGE EDGE EDGE EDGE $(v_zero_lvl - 50) $(v_zero_lvl + 0.5) units box
+region dt_reset block EDGE EDGE EDGE EDGE $(v_zero_lvl - 50) $(v_zero_lvl + 15) units box
 
 region Si_fixed block EDGE EDGE EDGE EDGE EDGE ${Si_fixed_top} units box
 
@@ -55,7 +55,7 @@ write_restart ${vacs_restart_file}
 pair_style tersoff/zbl
 pair_coeff * * SiC.tersoff.zbl Si C
 neigh_modify every 1 delay 0 check no
-neigh_modify binsize 5
+neigh_modify binsize 1
 neigh_modify one 4000
 
 # pair_style  hybrid airebo 3.0 tersoff/zbl
@@ -79,7 +79,7 @@ group Si_fixed region Si_fixed
 group nve subtract all Si_fixed
 group thermostat dynamic Si region bath every 1
 
-group dt_reset dynamic all region dt_reset every 100
+group dt_reset dynamic all region dt_reset every 10
 
 
 ### computes ###
@@ -105,8 +105,8 @@ compute sputter_c   C   reduce sum v_is_sputtered
 
 ### thermo ###
 reset_timestep 0
-timestep ${step}
-thermo 10
+timestep $(v_step)
+thermo 1
 thermo_style custom step pe ke etotal temp c_vacancies dt time c_sputter_all c_sputter_c c_sputter_si
 
 
@@ -115,11 +115,11 @@ fix balance all balance 20 1.0 shift xyz 10 1.0
 fix nve nve nve
 fix tbath thermostat temp/berendsen ${temperature} ${temperature} 0.001
 fix estop all electron/stopping 10.0 ${elstop_table} region e_stop
-fix dt dt_reset dt/reset 1 $(v_step/2) ${step} 0.1
+fix dt dt_reset dt/reset 1 $(v_step/10) $(v_step) 0.1
 
 
 ### dumps ###
-# dump during all custom 10 ${dump_during} id type x y z c_atom_ke
+# dump during all custom 1 ${dump_during} id type x y z c_atom_ke
 
 
 ### run simulation ###
@@ -136,9 +136,7 @@ unfix estop
 unfix dt
 group dt_reset delete
 
-# label run_b
-# run 200
-# if "$(time) < $(v_run_time / 1000)" then "jump SELF run_b"
+thermo 20
 run ${run_time}
  
 group clusters variable is_sputtered
