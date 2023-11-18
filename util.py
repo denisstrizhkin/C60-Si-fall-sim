@@ -73,102 +73,90 @@ class Cluster:
 
 
 def lammps_run(
-  in_file: Path, vars: List[Tuple[str, str]]=[],
-  omp_threads: int=4, mpi_cores: int=3,
-  workdir: Path=Path(os.getcwd()),
-  log_file: Path=Path('./log.lammps')
-  ) -> None:
-  docker_base: List[str] = [
-    'docker', 'run', '--rm',
-    '-v', f'{workdir.resolve()}:/var/workdir',
-    '--user', f'{os.getuid()}:{os.getgid()}'
-  ]
-
-  mpirun_base = [
-    'mpirun', '-np', str(mpi_cores),
-    'lmp', '-in', str(in_file)
-  ]
-
-  if (omp_threads <= 0):
-    args = mpirun_base + [
-      '-sf', 'gpu',
-      '-pk', 'gpu', '0',
-    ]
-    run_args = docker_base + [
-      '--gpus', 'all',
-      'lammpscuda'
-    ]
-  else:
-    args = mpirun_base + [
-      '-sf', 'omp',
-      '-pk', 'omp', str(omp_threads),
-    ]
-    run_args = docker_base + [
-      'lammpsmpi'
+        in_file: Path,
+        vars: List[Tuple[str, str]]=[],
+        omp_threads: int=4,
+        mpi_cores: int=3,
+        log_file: Path=Path('./log.lammps')
+    ) -> None:
+    mpirun_base = [
+        'mpirun', '-np', str(mpi_cores),
+        'lmp', '-in', str(in_file)
     ]
 
-  vars_list = [ ]      
-  for var in vars:
-    vars_list.append('-var')
-    vars_list.append(var[0])
-    vars_list.append(var[1])
+    if (omp_threads <= 0):
+        args = mpirun_base + [
+          '-sf', 'gpu',
+          '-pk', 'gpu', '0',
+        ]
+    else:
+        args = mpirun_base + [
+          '-sf', 'omp',
+          '-pk', 'omp', str(omp_threads),
+        ]
+
+    vars_list = [ ]      
+    for var in vars:
+        vars_list.append('-var')
+        vars_list.append(var[0])
+        vars_list.append(var[1])
                   
-  print('lammps_run:', args)
-  run_args = args + vars_list + [ '-log', f'{log_file}' ]
-  print('lammps_run:', run_args)
+    print('lammps_run:', args)
+    run_args = args + vars_list + [ '-log', f'{log_file}' ]
+    print('lammps_run:', run_args)
 
-  process = subprocess.Popen(run_args, encoding='utf-8')
-  while process.poll() is None:
-    time.sleep(1)
+    process = subprocess.Popen(run_args, encoding='utf-8')
+    while process.poll() is None:
+        time.sleep(1)
 
-  if process.returncode != 0:
-    print("lammps_run: FAIL")
-    sys.exit()
+    if process.returncode != 0:
+        print("lammps_run: FAIL")
+        sys.exit()
 
 
 def calc_surface_values(data: Dump, lattice: float, coeff: float, square: float) -> np.ndarray:
-  def get_linspace(left, right):
+    def get_linspace(left, right):
         return np.linspace(left, right, round((right - left) / square) + 1)
 
-  X = get_linspace(-lattice * coeff, lattice * coeff)
-  Y = get_linspace(-lattice * coeff, lattice * coeff)
-  Z = np.zeros((len(X) - 1, len(Y) - 1))
-  Z[:] = np.nan
+    X = get_linspace(-lattice * coeff, lattice * coeff)
+    Y = get_linspace(-lattice * coeff, lattice * coeff)
+    Z = np.zeros((len(X) - 1, len(Y) - 1))
+    Z[:] = np.nan
 
-  for i in range(len(X) - 1):
-    for j in range(len(Y) - 1):
-      Z_vals = data['z'][np.where(
-        (data['x'] >= X[i]) &
-        (data['x'] < X[i + 1]) &
-        (data['y'] >= Y[j]) &
-        (data['y'] < Y[j + 1])
-      )]
-      if len(Z_vals) != 0:
-        Z[i, j] = Z_vals.max()
+    for i in range(len(X) - 1):
+        for j in range(len(Y) - 1):
+            Z_vals = data["z"][np.where(
+                (data['x'] >= X[i]) &
+                (data['x'] < X[i + 1]) &
+                (data['y'] >= Y[j]) &
+                (data['y'] < Y[j + 1])
+            )]
+            if len(Z_vals) != 0:
+                Z[i, j] = Z_vals.max()
 
 
-  print(f'calc_surface: - NaN: {np.count_nonzero(np.isnan(Z))}')
-  def check_value(i, j):
-    if i < 0 or j < 0 or i >= len(X) - 1 or j >= len(Y) - 1:
-      return np.nan
-    return Z[i, j]
+    print(f'calc_surface: - NaN: {np.count_nonzero(np.isnan(Z))}')
+    def check_value(i, j):
+        if i < 0 or j < 0 or i >= len(X) - 1 or j >= len(Y) - 1:
+            return np.nan
+        return Z[i, j]
 
-  for i in range(len(X) - 1):
-    for j in range(len(Y) - 1):
-      if Z[i, j] == 0 or Z[i, j] == np.nan:
-        neighs = [
-          check_value(i - 1, j - 1),
-          check_value(i - 1, j    ),
-          check_value(i - 1, j + 1),
-          check_value(i + 1, j - 1),
-          check_value(i + 1, j    ),
-          check_value(i + 1, j + 1),
-          check_value(i    , j - 1),
-          check_value(i    , j + 1)
-        ]
-        Z[i, j] = np.nanmean(neighs)
+    for i in range(len(X) - 1):
+        for j in range(len(Y) - 1):
+            if Z[i, j] == 0 or Z[i, j] == np.nan:
+                neighs = [
+                    check_value(i - 1, j - 1),
+                    check_value(i - 1, j    ),
+                    check_value(i - 1, j + 1),
+                    check_value(i + 1, j - 1),
+                    check_value(i + 1, j    ),
+                    check_value(i + 1, j + 1),
+                    check_value(i    , j - 1),
+                    check_value(i    , j + 1)
+                ]
+                Z[i, j] = np.nanmean(neighs)
 
-  return Z
+    return Z
 
 
 def calc_zero_lvl(input_file: Path, in_path: Path) -> float:
@@ -184,7 +172,6 @@ def calc_zero_lvl(input_file: Path, in_path: Path) -> float:
       ('dump_path', str(dump_path)),
       ('dump_str', dump_str)
     ],
-    workdir=base_dir
   )
 
   dump = Dump(base_dir / dump_path)
