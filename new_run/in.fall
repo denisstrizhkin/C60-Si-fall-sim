@@ -24,15 +24,13 @@ lattice diamond ${lattice} orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
 # region Si_fixed_y_left  block EDGE                   EDGE                   EDGE                   $(ylo + v_fixed_width) EDGE ${Si_top} units box
 # region Si_fixed_y_right block EDGE                   EDGE                   $(yhi - v_fixed_width) EDGE                   EDGE ${Si_top} units box
 # region Si_fixed         union 5 Si_fixed_floor Si_fixed_x_left Si_fixed_x_right Si_fixed_y_left Si_fixed_y_right
-#
+# 
 # region floor   block EDGE                          EDGE                          EDGE                          EDGE                          ${Si_fixed_top} $(v_Si_fixed_top + zlat) units box
 # region x_left  block EDGE                          $(xlo + xlat + v_fixed_width) EDGE                          EDGE                          ${Si_fixed_top} ${Si_top}              units box
 # region x_right block $(xhi - xlat - v_fixed_width) EDGE                          EDGE                          EDGE                          ${Si_fixed_top} ${Si_top}              units box
 # region y_left  block EDGE                          EDGE                          EDGE                          $(ylo + ylat + v_fixed_width) ${Si_fixed_top} ${Si_top}              units box
 # region y_right block EDGE                          EDGE                          $(yhi - ylat - v_fixed_width) EDGE                          ${Si_fixed_top} ${Si_top}              units box
-
-region e_stop block EDGE EDGE EDGE EDGE $(v_zero_lvl - 50) $(v_zero_lvl + 0.5) units box
-region dt_reset block EDGE EDGE EDGE EDGE $(v_zero_lvl - 50) $(v_zero_lvl + 15) units box
+# region bath union 5 floor x_right x_left y_right y_left
 
 region Si_fixed block EDGE EDGE EDGE EDGE EDGE ${Si_fixed_top} units box
 
@@ -42,6 +40,9 @@ region x_right block $(xhi - xlat) EDGE          EDGE          EDGE          ${S
 region y_left  block EDGE          EDGE          EDGE          $(ylo + ylat) ${Si_fixed_top} ${Si_top}         units box
 region y_right block EDGE          EDGE          $(yhi - ylat) EDGE          ${Si_fixed_top} ${Si_top}         units box
 region bath union 5 floor x_right x_left y_right y_left
+
+region e_stop block EDGE EDGE EDGE EDGE $(v_zero_lvl - 50) $(v_zero_lvl + 0.5) units box
+region dt_reset block EDGE EDGE EDGE EDGE $(v_zero_lvl - 50) $(v_zero_lvl + 15) units box
 
 region C60_box block EDGE EDGE EDGE EDGE $(v_C60_z - 10) EDGE units box
 
