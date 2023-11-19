@@ -1,102 +1,34 @@
-# VARIABLES
-# variable width equal "4.0"
-# variable depth equal "16.0"
+# ### VARIABLES ###
 #
-# variable end_temp equal "700.0"
-# variable start_temp equal "1.0"
+# lattice : 5.43
 #
-# variable heat_time equal "10000"
+# zero_lvl : "83.21"
+# z_offset : "1.1"
 #
-# variable tdamp equal "100.0"
+# input_data : "./input.data"
+# output_data : "./output.data"
 
-package gpu 0
-suffix gpu
 
 # INIT
 units metal
-dimension	3
+dimension 3
 boundary p p f
 atom_style atomic
-atom_modify map yes
+read_data ${input_data}
 
-# CREATE SYMULATION BOX
-variable width equal 4
-variable depth equal 16
-
-variable xl equal "-v_width"
-variable xr equal "v_width"
-
-variable yl equal "-v_width"
-variable yr equal "v_width"
-
-variable zd equal "-v_depth"
-
-variable lattice equal "5.43"
-variable xy_offset equal "v_width * 2.0 * v_lattice"
-variable z_offset  equal "(15.0) * v_lattice + 1.1"
 
 # SET LATTICE
 lattice diamond ${lattice} orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
 
-region  r_symbox block ${xl} ${xr} ${yl} ${yr} ${zd} 100.0 units lattice
-create_box 1 r_symbox
 
-read_data input.data add merge
-region delete block ${xl} ${xr} ${yl} ${yr} -0.9 50 units lattice
+# REGIONS
+region delete block EDGE EDGE EDGE EDGE $(v_zero_lvl - 0.9 * v_lattice) EDGE units box
+
+
+# ADD COPY
 delete_atoms region delete compress yes
-read_data input.data add append shift 0.0 0.0 ${z_offset}
+read_data ${input_data} add append shift 0.0 0.0 ${z_offset}
 
-# CREATE ATOMS
-variable zf equal "-v_depth + 0.25"
 
-variable z_si_all equal "z_offset + 1.0"
-region  r_si_fix block ${xl} ${xr} ${yl} ${yr} ${zd} ${zf} units lattice
-
-region  r_top    block ${xl} ${xr} ${yl} ${yr} 15.0 15.5 units lattice
-
-mass 1 28.08553
-
-# POTENTIALS
-pair_style tersoff/zbl
-pair_coeff * * potentials/SiC.tersoff.zbl Si
-neighbor 3.0 bin
-
-# GROUPS
-group g_si_all type 1
-group g_si_fix region r_si_fix
-
-group g_top region r_top
-
-group g_si subtract g_si_all g_si_fix
-
-# VORONOI
-compute voro g_si voronoi/atom occupation only_group
-
-variable is_vac atom "c_voro[1]==0"
-compute vac_sum g_si reduce sum v_is_vac
-variable vacs equal "c_vac_sum"
-
-# COMPUTE TOP
-compute top_sum g_top reduce sum z
-variable top_num equal count(g_top)
-variable top_avrg equal "c_top_sum / 1"
-variable step equal "step"
-
-# SET START CONDITIONS
-timestep 0.001
-
-# THERMO
-reset_timestep 0
-thermo 50
-thermo_style custom step pe ke etotal temp v_vacs
-
-# RUN HEAT
-dump  d_all all custom 20 all.dump id type x y z vx vy vz
-
-# FIXES
-fix f_nve g_si nve
-fix extra2 all print 10 "${step} ${top_avrg}" file graph2.txt screen no
-
-thermo_modify lost ignore
-run 5000
-write_data output.data
+# SAVE
+write_data ${output_data}
