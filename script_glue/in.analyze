@@ -1,3 +1,32 @@
+# ### VARIABLES ###
+#
+# lattice : 5.43
+#
+# zero_lvl : "83.21"
+#
+# input_data : "./input.data"
+# oscillations_dump : "./oscillations.txt"
+#
+
+
+# INIT
+units metal
+dimension 3
+boundary p p f
+atom_style atomic
+atom_modify map yes
+read_data ${input_data}
+
+
+# VARIABLES
+variable fixed_width equal '0.5 * v_lattice'
+variable Si_fixed_top equal 'zlo + v_fixed_width'
+
+
+# REGIONS
+region Si_fixed block EDGE EDGE EDGE EDGE EDGE ${Si_fixed_top} units box
+region Si_top block EDGE EDGE EDGE EDGE $(v_zero_lvl - 0.5 * v_lattice) EDGE units box
+
 
 # MASS
 mass 1 28.08553
@@ -11,9 +40,9 @@ neighbor 3.0 bin
 
 # GROUPS
 group Si type 1
-
 group Si_fixed region Si_fixed
 group nve subtract all Si_fixed
+group Si_top region Si_top
 
 
 # VORONOI
@@ -22,32 +51,28 @@ variable is_vacancy atom "c_voro_occupation[1]==0"
 compute vacancies Si reduce sum v_is_vacancy
 
 
+# COMPUTE TOP
+compute top_sum Si_top reduce sum z
+variable top_num equal count(Si_top)
+variable top_avrg equal "c_top_sum / v_top_num"
+variable step equal "step"
+
+
 # THERMO
 timestep 0.001
 reset_timestep 0
 thermo 50
-thermo_style custom step pe ke etotal temp v_vacs
+thermo_style custom step pe ke etotal temp c_vacancies
+
 
 # DUMP
 dump d_all all custom 20 all.dump id type x y z vx vy vz
 
+
 # FIXES
 fix nve nve nve
-fix oscillations all print 11 "${step} ${top_avrg}" file graph2.txt screen no
+fix oscillations all print 10 "${step} ${top_avrg}" file ${oscillations_dump} screen no
 
-thermo_modify lost ignore
+
+# RUN
 run 5000
-
-# COMPUTE TOP
-compute top_sum g_top reduce sum z
-variable top_num equal count(g_top)
-variable top_avrg equal "c_top_sum / 1"
-variable step equal "step"
-
-# FIXES
-fix f_nve g_si nve
-fix extra2 all print 10 "${step} ${top_avrg}" file graph2.txt screen no
-
-thermo_modify lost ignore
-run 5000
-write_data output.data
