@@ -553,7 +553,7 @@ def main() -> None:
         util.lammps_run(
             WORKDIR / 'new_run/in.fall',
             vars, omp_threads=OMP_THREADS,
-            mpi_cores=MPI_CORES, workdir=workdir,
+            mpi_cores=MPI_CORES,
             log_file=log_file
         )
         # TODO do something about this already
@@ -618,7 +618,7 @@ def main() -> None:
                     ('input_file', input_file),
                     ('dump_crater', dump_crater_path),
                     ('vac_ids', vac_ids)
-                ], workdir=workdir
+                ]
             )
 
             dump_crater = Dump(dump_crater_path)
