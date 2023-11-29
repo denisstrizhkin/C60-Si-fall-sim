@@ -156,6 +156,17 @@ read_data input.data add append shift $(v_xy_offset * -0.5) $(v_xy_offset * -0.5
 
 3x3
 ```
+change_box all x scale 3.0 y scale 3.0
+
+read_data input.data add merge
+read_data input.data add append shift +${xy_offset} +${xy_offset} 0.0
+read_data input.data add append shift -${xy_offset} +${xy_offset} 0.0
+read_data input.data add append shift -${xy_offset} -${xy_offset} 0.0
+read_data input.data add append shift +${xy_offset} -${xy_offset} 0.0
+read_data input.data add append shift 0.0           +${xy_offset} 0.0
+read_data input.data add append shift 0.0           -${xy_offset} 0.0
+read_data input.data add append shift +${xy_offset} 0.0           0.0
+read_data input.data add append shift -${xy_offset} 0.0           0.0
 ```
 
 5x5
