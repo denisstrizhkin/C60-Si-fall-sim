@@ -5,16 +5,6 @@ RUN emerge-webrsync
 RUN rmdir /etc/portage/{package.use,package.accept_keywords,package.mask} \
   && echo 'FEATURES="-ipc-sandbox -network-sandbox -pid-sandbox"' >> /etc/portage/make.conf
 
-RUN emerge -q sys-devel/gcc:12
-
-RUN emerge -C sys-devel/gcc:13
-
-RUN echo 'sys-devel/gcc:13' > /etc/portage/package.mask
-
-RUN emerge -q dev-util/ninja
-
-RUN emerge -qe @world
-
 RUN emerge -1q dev-vcs/git eselect-repository
 
 RUN eselect repository create local
