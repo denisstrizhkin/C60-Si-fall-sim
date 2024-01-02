@@ -32,7 +32,7 @@ S="${WORKDIR}/${MY_P}/cmake"
 LICENSE="GPL-2"
 SLOT="0"
 KEYWORDS="amd64 ~x86"
-IUSE="cuda examples gzip hip lammps-memalign mpi opencl openmp python test"
+IUSE="cuda examples extra gzip hip lammps-memalign mpi opencl openmp python test"
 # Requires write access to /dev/dri/renderD...
 RESTRICT="test"
 
@@ -87,6 +87,11 @@ src_configure() {
                 #-DBUILD_DOC=$(usex doc)
                 -DENABLE_TESTING=$(usex test)
                 -DPKG_OPENMP=$(usex openmp)
+                -DPKG_EXTRA-COMPUTE=$(usex extra)
+                -DPKG_EXTRA-DUMP=$(usex extra)
+                -DPKG_EXTRA-FIX=$(usex extra)
+                -DPKG_EXTRA-MOLECULE=$(usex extra)
+                -DPKG_EXTRA-PAIR=$(usex extra)
                 -DPKG_ASPHERE=ON
                 -DPKG_BODY=ON
                 -DPKG_CLASS2=ON
