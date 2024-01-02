@@ -25,22 +25,10 @@ RUN cp /var/db/repos/gentoo/sci-physics/lammps/metadata.xml .
 
 COPY lammps-20230802.ebuild .
 
-RUN echo 'dev-util/nvidia-cuda-toolkit NVIDIA-CUDA' > /etc/portage/package.license \
-  && echo 'x11-drivers/nvidia-drivers NVIDIA-r2' >> /etc/portage/package.license
-
-RUN echo 'sci-physics/lammps mpi openmp cuda python' > /etc/portage/package.use \
+RUN echo 'sci-physics/lammps extra mpi opencl openmp cuda python' > /etc/portage/package.use \
   && echo 'sci-libs/netcdf mpi' >> /etc/portage/package.use \
   && echo 'sci-libs/hdf5 mpi' >> /etc/portage/package.use \
-  && echo 'virtual/mpi romio' >> /etc/portage/package.use \
-  && echo '*/* -X' >> /etc/portage/package.use \
-  && echo 'x11-drivers/nvidia-drivers -modules -tools' >> /etc/portage/package.use 
-
-RUN echo 'x11-drivers/nvidia-drivers:0/535' >> /etc/portage/package.mask \
-  && echo 'x11-drivers/nvidia-drivers:0/545' >> /etc/portage/package.mask
-
-RUN echo 'ACCEPT_KEYWORDS="~amd64"' >> /etc/portage/make.conf
-
-RUN emerge -1q dev-util/nvidia-cuda-toolkit
+  && echo 'virtual/mpi romio' >> /etc/portage/package.use
 
 RUN ebuild lammps-20230802.ebuild manifest
 
@@ -54,14 +42,3 @@ RUN emerge numpy matplotlib
 
 RUN rm -rf /var/cache/distfiles \
   && emerge -c
-
-# RUN  . "$VIRTUAL_ENV/bin/activate" && cd "$LAMMPS_SRC" && mkdir build && cd build \
-#   && cmake -D LAMMPS_INSTALL_RPATH=ON -D BUILD_SHARED_LIBS=yes \
-#        -D PKG_OPENMP=on -D BUILD_MPI=yes \
-#        -D PKG_GPU=yes -D GPU_API=cuda -D GPU_ARCH=sm_80 -D BIN2C=/opt/cuda/bin/bin2c \ 
-#        -D LAMMPS_EXCEPTIONS=yes -D PKG_PYTHON=yes \
-#        -D PKG_MANYBODY=on -D PKG_VORONOI=on -D PKG_EXTRA-FIX=on \ 
-#        -D CMAKE_INSTALL_PREFIX="$VIRTUAL_ENV" -D CMAKE_INSTALL_LIBDIR=lib -D CMAKE_INSTALL_FULL_LIBDIR="$VIRTUAL_ENV/lib" ../cmake \
-#   && make -j$(nproc) && make install && make install-python
-
-# WORKDIR /var/workdir
