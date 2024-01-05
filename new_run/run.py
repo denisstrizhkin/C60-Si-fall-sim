@@ -4,15 +4,11 @@ import numpy as np
 from pathlib import Path
 import argparse
 import os
-import sys
 from os import path
 import tempfile
-from typing import List
 
-
-sys.path.append('../')
-import util
-from util import Dump, Atom, Cluster
+import lammps_util
+from lammps_util import Dump, Atom, Cluster
 
 
 def parse_args():
@@ -132,7 +128,7 @@ TMP: Path = Path(tempfile.gettempdir())
 SI_ATOM_TYPE: int = 1
 C_ATOM_TYPE: int = 2
 
-ZERO_LVL: float = util.calc_zero_lvl(WORKDIR / INPUT_FILE, WORKDIR / 'in.zero_lvl')
+ZERO_LVL: float = lammps_util.calc_zero_lvl(WORKDIR / INPUT_FILE, WORKDIR / 'in.zero_lvl')
 
 RUN_TIME: int
 if ARGS.run_time is not None:
@@ -375,7 +371,7 @@ def clusters_parse(file_path):
 
     header_str = "simN\t" + "\t".join(clusters_dic.keys())
     output_path = path.splitext(file_path)[0] + "_parsed" + path.splitext(file_path)[1]
-    util.save_table(output_path, table, header_str, dtype="d")
+    lammps_util.save_table(output_path, table, header_str, dtype="d")
 
 
 def clusters_parse_sum(file_path):
@@ -406,7 +402,7 @@ def clusters_parse_sum(file_path):
             path.splitext(file_path)[0] + "_parsed_sum" + path.splitext(file_path)[1]
     )
 
-    util.save_table(output_path, table, header_str, dtype="d")
+    lammps_util.save_table(output_path, table, header_str, dtype="d")
 
 
 def clusters_parse_angle_dist(file_path):
@@ -446,7 +442,7 @@ def clusters_parse_angle_dist(file_path):
             + "_parsed_number_dist"
             + path.splitext(file_path)[1]
     )
-    util.save_table(output_path_number, number_table, header_str_number)
+    lammps_util.save_table(output_path_number, number_table, header_str_number)
 
     header_str_energy = "angle E1 E2 E3 ... E50"
     output_path_energy = (
@@ -454,7 +450,7 @@ def clusters_parse_angle_dist(file_path):
             + "_parsed_energy_dist"
             + path.splitext(file_path)[1]
     )
-    util.save_table(output_path_energy, energy_table, header_str_energy)
+    lammps_util.save_table(output_path_energy, energy_table, header_str_energy)
 
 
 def carbon_dist_parse(file_path):
@@ -493,7 +489,7 @@ def carbon_dist_parse(file_path):
     header_str = "simN " + " ".join(list(map(str, bins)))
 
     output_path = path.splitext(file_path)[0] + "_parsed" + path.splitext(file_path)[1]
-    util.save_table(output_path, table.T, header_str)
+    lammps_util.save_table(output_path, table.T, header_str)
 
 
 def main() -> None:
@@ -550,7 +546,7 @@ def main() -> None:
         ]
 
         workdir=Path('../')
-        util.lammps_run(
+        lammps_util.lammps_run(
             WORKDIR / 'new_run/in.fall',
             vars, omp_threads=OMP_THREADS,
             mpi_cores=MPI_CORES,
@@ -574,16 +570,16 @@ def main() -> None:
             cluster_dic[key] = Cluster(cluster_dic_atoms[key], SI_ATOM_TYPE)
 
         clusters_table = get_clusters_table(cluster_dic, run_num).astype(float)
-        util.save_table(CLUSTERS_TABLE, clusters_table, mode='a')
+        lammps_util.save_table(CLUSTERS_TABLE, clusters_table, mode='a')
 
         rim_info = get_rim_info(rim_atoms, fu_x, fu_y, run_num)
-        util.save_table(RIM_TABLE, rim_info, mode='a')
+        lammps_util.save_table(RIM_TABLE, rim_info, mode='a')
 
         carbon = get_carbon(dump_final, carbon_sputtered)
         carbon_hist = get_carbon_hist(carbon)
-        util.save_table(CARBON_DIST, carbon_hist, header=str(run_num), mode='a')
+        lammps_util.save_table(CARBON_DIST, carbon_hist, header=str(run_num), mode='a')
         carbon_info = get_carbon_info(carbon, fu_x, fu_y, run_num)
-        util.save_table(CARBON_TABLE, carbon_info, mode='a')
+        lammps_util.save_table(CARBON_TABLE, carbon_info, mode='a')
 
         ids_to_delete = []
         if len(cluster_dic.keys()) != 0:
@@ -605,15 +601,15 @@ def main() -> None:
                     f_out.write(line)
 
         dump_final_no_cluster = Dump(dump_final_no_cluster_path)
-        sigma = util.calc_surface(dump_final_no_cluster, run_dir, LATTICE, ZERO_LVL)
+        sigma = lammps_util.calc_surface(dump_final_no_cluster, run_dir, LATTICE, ZERO_LVL)
         #save_table(run_dir / 'surface_table.txt', surface_data, mode='w')
-        util.save_table(SURFACE_TABLE, [[run_num, sigma]], mode='a')
+        lammps_util.save_table(SURFACE_TABLE, [[run_num, sigma]], mode='a')
 
         dump_cluster_id = Dump(dump_crater_id_path)
         if (len(dump_cluster_id['id']) > 0):
             vac_ids = " ".join(map(str, map(int, dump_cluster_id['id'])))
 
-            util.lammps_run(WORKDIR / 'new_run/in.crater',
+            lammps_util.lammps_run(WORKDIR / 'new_run/in.crater',
                 [
                     ('input_file', input_file),
                     ('dump_crater', dump_crater_path),
@@ -623,7 +619,7 @@ def main() -> None:
 
             dump_crater = Dump(dump_crater_path)
             crater_info = get_crater_info(dump_crater, run_num)
-            util.save_table(CRATER_TABLE, crater_info, mode='a')
+            lammps_util.save_table(CRATER_TABLE, crater_info, mode='a')
 
     clusters_parse(CLUSTERS_TABLE)
     clusters_parse_sum(CLUSTERS_TABLE)
