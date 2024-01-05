@@ -7,9 +7,14 @@ export LAMMPS_POTENTIALS=/usr/share/lammps/potentials
   --mpi-cores 8 \
   \
   --temperature "1e-6" \
-  --energy 14 \
-  --runs 50 \
-  --run-time 1005 \
+  --energy 8 \
+  --runs 5 \
+  --run-time 3000 \
   \
-  --results-dir 'new_run/test_size_20_20_14keV' \
-  --input-file 'input_files/fall_0K_20_20_31.input.data' \
+  --results-dir '../results/test' \
+  \
+  --input-file '../input_files/fall_0K_20_20_31.input.data' \
+  --mol-file '../input_files/mol.C60' \
+  --estop-table '../input_files/elstop-table.txt' \
+  \
+  --script-dir './'

@@ -114,7 +114,7 @@ def parse_args():
 
 ARGS = parse_args()
 
-OUT_DIR: Path = ARGS.results_dir
+OUT_DIR: Path = Path(ARGS.results_dir)
 if not OUT_DIR.exists():
     OUT_DIR.mkdir()
 
@@ -256,8 +256,8 @@ def get_clusters_table(cluster_dic, sim_num):
                 np.array(
                     [
                         sim_num,
-                        cluster.count_Si,
-                        cluster.count_C,
+                        cluster.count_si,
+                        cluster.count_c,
                         cluster.mass,
                         cluster.mx,
                         cluster.my,
