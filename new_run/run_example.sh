@@ -1,5 +1,7 @@
 #!/bin/bash
 
+export LAMMPS_POTENTIALS=/usr/share/lammps/potentials
+
 ./run.py \
   --omp-threads 0 \
   --mpi-cores 8 \
