@@ -56,7 +56,7 @@ write_restart ${vacs_restart_file}
 pair_style tersoff/zbl
 pair_coeff * * SiC.tersoff.zbl Si C
 neigh_modify every 1 delay 0 check no
-neigh_modify binsize 1
+neigh_modify binsize 0.0
 neigh_modify one 4000
 
 # pair_style  hybrid airebo 3.0 tersoff/zbl
