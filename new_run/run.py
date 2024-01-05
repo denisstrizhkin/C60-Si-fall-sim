@@ -29,7 +29,7 @@ def parse_args():
         required=False,
         default=8,
         type=float,
-        help="Set fall energy of the simulation. (keV)"
+        help="Set fall energy of the simulation. (keV)",
     )
 
     parser.add_argument(
@@ -38,7 +38,7 @@ def parse_args():
         required=False,
         default=2,
         type=int,
-        help="Number of simulations to run."
+        help="Number of simulations to run.",
     )
 
     parser.add_argument(
@@ -47,7 +47,7 @@ def parse_args():
         required=False,
         default=None,
         type=int,
-        help="Run simulation this amount of steps."
+        help="Run simulation this amount of steps.",
     )
 
     parser.add_argument(
@@ -56,7 +56,7 @@ def parse_args():
         required=False,
         default=2,
         type=int,
-        help="Set number of OpenMP threads. (if set to 0 use GPU)"
+        help="Set number of OpenMP threads. (if set to 0 use GPU)",
     )
 
     parser.add_argument(
@@ -65,14 +65,14 @@ def parse_args():
         required=False,
         default=4,
         type=int,
-        help="Set number of MPI cores."
+        help="Set number of MPI cores.",
     )
-    
+
     parser.add_argument(
         "--results-dir",
         action="store",
         required=False,
-        default='./results',
+        default="./results",
         type=str,
         help="Set directory path where to store computational results.",
     )
@@ -147,7 +147,9 @@ TMP: Path = Path(tempfile.gettempdir())
 SI_ATOM_TYPE: int = 1
 C_ATOM_TYPE: int = 2
 
-ZERO_LVL: float = lammps_util.calc_zero_lvl(INPUT_FILE, SCRIPT_DIR / 'in.zero_lvl')
+ZERO_LVL: float = lammps_util.calc_zero_lvl(
+    INPUT_FILE, SCRIPT_DIR / "in.zero_lvl"
+)
 
 RUN_TIME: int
 if ARGS.run_time is not None:
@@ -178,7 +180,7 @@ write_header("sim_num N r_mean r_max", CARBON_TABLE)
 write_header("sim_num N V S z_mean z_min", CRATER_TABLE)
 write_header("z count", CARBON_DIST)
 write_header("sim_num sigma", SURFACE_TABLE)
-#write_header("sim_num id Si C Sum", COORD_NUM_TABLE)
+# write_header("sim_num id Si C Sum", COORD_NUM_TABLE)
 
 
 def extract_ids_var(lmp, name, group):
@@ -190,27 +192,33 @@ def extract_ids_var(lmp, name, group):
 
 
 def get_cluster_dic(cluster_dump: Dump):
-    clusters = cluster_dump['c_clusters']
+    clusters = cluster_dump["c_clusters"]
 
     cluster_dic: dict = dict()
     for cluster_id in set(clusters):
         cluster_dic[cluster_id] = []
-   
-    x = cluster_dump['x']
-    y = cluster_dump['y']
-    z = cluster_dump['z']
-    vx = cluster_dump['vx']
-    vy = cluster_dump['vy']
-    vz = cluster_dump['vz']
-    mass = cluster_dump['c_mass']
-    type = cluster_dump['type']
-    id = cluster_dump['id']
-   
+
+    x = cluster_dump["x"]
+    y = cluster_dump["y"]
+    z = cluster_dump["z"]
+    vx = cluster_dump["vx"]
+    vy = cluster_dump["vy"]
+    vz = cluster_dump["vz"]
+    mass = cluster_dump["c_mass"]
+    type = cluster_dump["type"]
+    id = cluster_dump["id"]
+
     for i in range(0, len(z)):
         cluster = Atom(
-            x = x[i], y = y[i], z = z[i],
-            vx = vx[i], vy = vy[i], vz = vz[i],
-            mass = mass[i], type = type[i], id = id[i]
+            x=x[i],
+            y=y[i],
+            z=z[i],
+            vx=vx[i],
+            vy=vy[i],
+            vz=vz[i],
+            mass=mass[i],
+            type=type[i],
+            id=id[i],
         )
         cluster_dic[clusters[i]].append(cluster)
 
@@ -219,11 +227,11 @@ def get_cluster_dic(cluster_dump: Dump):
         for cluster in cluster_dic[key]:
             if cluster.z < (ZERO_LVL + 2.0):
                 keys_to_delete.append(key)
-                break;
+                break
 
     rim_atoms = []
     for key in keys_to_delete:
-       rim_atoms += cluster_dic.pop(key) 
+        rim_atoms += cluster_dic.pop(key)
 
     return cluster_dic, rim_atoms
 
@@ -231,7 +239,10 @@ def get_cluster_dic(cluster_dump: Dump):
 def get_vacancies_group_cmd(lmp):
     vac_ids = lmp.extract_variable("vacancy_id", "Si", 1)
     vac_ids = vac_ids[vac_ids != 0]
-    return "group vac id " + " ".join(vac_ids.astype(int).astype(str)), len(vac_ids) != 0
+    return (
+        "group vac id " + " ".join(vac_ids.astype(int).astype(str)),
+        len(vac_ids) != 0,
+    )
 
 
 def get_clusters_table(cluster_dic, sim_num):
@@ -240,11 +251,22 @@ def get_clusters_table(cluster_dic, sim_num):
     for key in cluster_dic.keys():
         cluster = cluster_dic[key]
         table = np.concatenate(
-            (table, np.array([
-                sim_num, cluster.count_Si, cluster.count_C, cluster.mass,
-                cluster.mx, cluster.my, cluster.mz,
-                cluster.ek, cluster.angle
-            ]))
+            (
+                table,
+                np.array(
+                    [
+                        sim_num,
+                        cluster.count_Si,
+                        cluster.count_C,
+                        cluster.mass,
+                        cluster.mx,
+                        cluster.my,
+                        cluster.mz,
+                        cluster.ek,
+                        cluster.angle,
+                    ]
+                ),
+            )
         )
 
     return table.reshape((table.shape[0] // 9, 9))
@@ -279,17 +301,17 @@ def get_rim_info(rim_atoms, fu_x, fu_y, sim_num):
 
 
 def get_carbon(dump_final, carbon_sputtered):
-    x = dump_final['x']
-    y = dump_final['y']
-    z = dump_final['z']
-    id = dump_final['id']
-    type = dump_final['type']
+    x = dump_final["x"]
+    y = dump_final["y"]
+    z = dump_final["z"]
+    id = dump_final["id"]
+    type = dump_final["type"]
 
     carbon = []
     for i in range(0, len(x)):
         if id[i] not in carbon_sputtered and type[i] == C_ATOM_TYPE:
-            carbon.append(Atom(x = x[i], y = y[i], z = z[i], id = id[i]))
-    
+            carbon.append(Atom(x=x[i], y=y[i], z=z[i], id=id[i]))
+
     return carbon
 
 
@@ -299,9 +321,11 @@ def get_carbon_hist(carbon):
         z_coords.append(np.around(c.z - ZERO_LVL, 1))
     z_coords = np.array(z_coords)
 
-    right = int(np.ceil(z_coords.max(initial=float('-inf'))))
-    left = int(np.floor(z_coords.min(initial=float('+inf'))))
-    hist, bins = np.histogram(z_coords, bins=(right - left), range=(left, right))
+    right = int(np.ceil(z_coords.max(initial=float("-inf"))))
+    left = int(np.floor(z_coords.min(initial=float("+inf"))))
+    hist, bins = np.histogram(
+        z_coords, bins=(right - left), range=(left, right)
+    )
     length = len(hist)
     hist = np.concatenate(
         ((bins[1:] - 0.5).reshape(length, 1), hist.reshape(length, 1)), axis=1
@@ -323,17 +347,17 @@ def get_carbon_info(carbon, fu_x, fu_y, sim_num):
 
 
 def get_crater_info(dump_crater: Dump, sim_num):
-    id = dump_crater['id']
-    z = dump_crater['z']
-    clusters = dump_crater['c_clusters']
+    id = dump_crater["id"]
+    z = dump_crater["z"]
+    clusters = dump_crater["c_clusters"]
 
     crater_id = np.bincount(clusters.astype(int)).argmax()
     atoms = []
     for i in range(0, len(id)):
         if clusters[i] == crater_id:
-            atoms.append(Atom(z = z[i], id = id[i]))
-    
-    cell_vol = np.median(dump_crater['c_voro_vol[1]'])
+            atoms.append(Atom(z=z[i], id=id[i]))
+
+    cell_vol = np.median(dump_crater["c_voro_vol[1]"])
     crater_vol = cell_vol * len(atoms)
 
     surface_count = 0
@@ -389,13 +413,17 @@ def clusters_parse(file_path):
         cluster_index += 1
 
     header_str = "simN\t" + "\t".join(clusters_dic.keys())
-    output_path = lammps_util.file_without_suffix(file_path) + "_parsed" + lammps_util.file_get_suffix(file_path)
+    output_path = (
+        lammps_util.file_without_suffix(file_path)
+        + "_parsed"
+        + lammps_util.file_get_suffix(file_path)
+    )
     lammps_util.save_table(output_path, table, header_str, dtype="d")
 
 
 def clusters_parse_sum(file_path):
     clusters = np.loadtxt(file_path, ndmin=2, skiprows=1)
-    
+
     clusters = clusters[:, :3]
 
     clusters_dic = {}
@@ -412,12 +440,16 @@ def clusters_parse_sum(file_path):
     for i in clusters_dic.keys():
         table[i - 1][0] = i
         if i in clusters_dic:
-          table[i - 1][1] = clusters_dic[i]["Si"]
-          table[i - 1][2] = clusters_dic[i]["C"]
-          table[i - 1][3] = table[i - 1][1] + table[i - 1][2]
+            table[i - 1][1] = clusters_dic[i]["Si"]
+            table[i - 1][2] = clusters_dic[i]["C"]
+            table[i - 1][3] = table[i - 1][1] + table[i - 1][2]
 
     header_str = "simN Si C"
-    output_path = lammps_util.file_without_suffix(file_path) + "_parsed_sum" + lammps_util.file_get_suffix(file_path)
+    output_path = (
+        lammps_util.file_without_suffix(file_path)
+        + "_parsed_sum"
+        + lammps_util.file_get_suffix(file_path)
+    )
     lammps_util.save_table(output_path, table, header_str, dtype="d")
 
 
@@ -450,14 +482,22 @@ def clusters_parse_angle_dist(file_path):
         number_table[angle_index, sim_index] += clusters_sim_num_n[i, 1]
         energy_table[angle_index, sim_index] += clusters_enrg_ang[i, 1]
 
-    print(number_table[:,:10])
+    print(number_table[:, :10])
 
     header_str_number = "angle N1 N2 N3 ... N50"
-    output_path_number = lammps_util.file_without_suffix(file_path) + "_parsed_number_dist" + lammps_util.file_get_suffix(file_path)
+    output_path_number = (
+        lammps_util.file_without_suffix(file_path)
+        + "_parsed_number_dist"
+        + lammps_util.file_get_suffix(file_path)
+    )
     lammps_util.save_table(output_path_number, number_table, header_str_number)
 
     header_str_energy = "angle E1 E2 E3 ... E50"
-    output_path_energy = lammps_util.file_without_suffix(file_path) + "_parsed_energy_dist" + lammps_util.file_get_suffix(file_path)
+    output_path_energy = (
+        lammps_util.file_without_suffix(file_path)
+        + "_parsed_energy_dist"
+        + lammps_util.file_get_suffix(file_path)
+    )
     lammps_util.save_table(output_path_energy, energy_table, header_str_energy)
 
 
@@ -496,7 +536,11 @@ def carbon_dist_parse(file_path):
 
     header_str = "simN " + " ".join(list(map(str, bins)))
 
-    output_path = lammps_util.file_without_suffix(file_path) + "_parsed" + lammps_util.file_get_suffix(file_path)
+    output_path = (
+        lammps_util.file_without_suffix(file_path)
+        + "_parsed"
+        + lammps_util.file_get_suffix(file_path)
+    )
     lammps_util.save_table(output_path, table.T, header_str)
 
 
@@ -514,50 +558,46 @@ def main() -> None:
         fu_x = rnd_coord(C60_X)
         fu_y = rnd_coord(C60_Y)
 
-        vacs_restart_file: Path = TMP / 'vacs.restart'
+        vacs_restart_file: Path = TMP / "vacs.restart"
 
-        dump_cluster_path: Path = run_dir / 'dump.cluster'
-        dump_final_path: Path = run_dir / 'dump.final'
-        dump_during_path: Path = run_dir / 'dump.during'
-        dump_crater_path: Path = run_dir / 'dump.crater'
-        dump_crater_id_path: Path = run_dir / 'dump.crater_id'
+        dump_cluster_path: Path = run_dir / "dump.cluster"
+        dump_final_path: Path = run_dir / "dump.final"
+        dump_during_path: Path = run_dir / "dump.during"
+        dump_crater_path: Path = run_dir / "dump.crater"
+        dump_crater_id_path: Path = run_dir / "dump.crater_id"
 
-        log_file: Path = run_dir / 'log.lammps'
-        write_file = TMP / 'tmp.input.data'
+        log_file: Path = run_dir / "log.lammps"
+        write_file = TMP / "tmp.input.data"
 
         print(input_file)
         vars = [
-            ('input_file', str(input_file)),
-            ('mol_file', str(MOL_FILE)),
-            ('elstop_table', str(ELSTOP_TABLE)),
-
-            ('lattice', str(LATTICE)),
-            ('Si_top', str(ZERO_LVL + 0.5)),
-
-            ('C60_z_offset', str(C60_Z_OFFSET)),
-            ('C60_y', str(fu_y)),
-            ('C60_x', str(fu_x)),
-
-            ('step', str(STEP)),
-            ('temperature', str(TEMPERATURE)),
-            ('energy', str(ENERGY)),
-            ('zero_lvl', str(ZERO_LVL)),
-            ('vacs_restart_file', str(vacs_restart_file)),
-            ('run_time', str(RUN_TIME - 1000)),
-
-            ('dump_cluster', str(dump_cluster_path)),
-            ('dump_final', str(dump_final_path)),
-            ('dump_during', str(dump_during_path)),
-            ('dump_crater_id', str(dump_crater_id_path)),
-
-            ('write_file', str(write_file))
+            ("input_file", str(input_file)),
+            ("mol_file", str(MOL_FILE)),
+            ("elstop_table", str(ELSTOP_TABLE)),
+            ("lattice", str(LATTICE)),
+            ("Si_top", str(ZERO_LVL + 0.5)),
+            ("C60_z_offset", str(C60_Z_OFFSET)),
+            ("C60_y", str(fu_y)),
+            ("C60_x", str(fu_x)),
+            ("step", str(STEP)),
+            ("temperature", str(TEMPERATURE)),
+            ("energy", str(ENERGY)),
+            ("zero_lvl", str(ZERO_LVL)),
+            ("vacs_restart_file", str(vacs_restart_file)),
+            ("run_time", str(RUN_TIME - 1000)),
+            ("dump_cluster", str(dump_cluster_path)),
+            ("dump_final", str(dump_final_path)),
+            ("dump_during", str(dump_during_path)),
+            ("dump_crater_id", str(dump_crater_id_path)),
+            ("write_file", str(write_file)),
         ]
 
         lammps_util.lammps_run(
-            SCRIPT_DIR / 'in.fall',
-            vars, omp_threads=OMP_THREADS,
+            SCRIPT_DIR / "in.fall",
+            vars,
+            omp_threads=OMP_THREADS,
             mpi_cores=MPI_CORES,
-            log_file=log_file
+            log_file=log_file,
         )
         # TODO do something about this already
         # input_file = write_file
@@ -577,16 +617,18 @@ def main() -> None:
             cluster_dic[key] = Cluster(cluster_dic_atoms[key], SI_ATOM_TYPE)
 
         clusters_table = get_clusters_table(cluster_dic, run_num).astype(float)
-        lammps_util.save_table(CLUSTERS_TABLE, clusters_table, mode='a')
+        lammps_util.save_table(CLUSTERS_TABLE, clusters_table, mode="a")
 
         rim_info = get_rim_info(rim_atoms, fu_x, fu_y, run_num)
-        lammps_util.save_table(RIM_TABLE, rim_info, mode='a')
+        lammps_util.save_table(RIM_TABLE, rim_info, mode="a")
 
         carbon = get_carbon(dump_final, carbon_sputtered)
         carbon_hist = get_carbon_hist(carbon)
-        lammps_util.save_table(CARBON_DIST, carbon_hist, header=str(run_num), mode='a')
+        lammps_util.save_table(
+            CARBON_DIST, carbon_hist, header=str(run_num), mode="a"
+        )
         carbon_info = get_carbon_info(carbon, fu_x, fu_y, run_num)
-        lammps_util.save_table(CARBON_TABLE, carbon_info, mode='a')
+        lammps_util.save_table(CARBON_TABLE, carbon_info, mode="a")
 
         ids_to_delete = []
         if len(cluster_dic.keys()) != 0:
@@ -595,8 +637,10 @@ def main() -> None:
                     ids_to_delete.append(atom.id)
             ids_to_delete = list(map(int, ids_to_delete))
 
-        dump_final_no_cluster_path = run_dir / 'dump.final_no_cluster'
-        with open(dump_final_path, 'r') as f_in, open(dump_final_no_cluster_path, 'w') as f_out:
+        dump_final_no_cluster_path = run_dir / "dump.final_no_cluster"
+        with open(dump_final_path, "r") as f_in, open(
+            dump_final_no_cluster_path, "w"
+        ) as f_out:
             cnt = -1
             for line in f_in:
                 cnt += 1
@@ -608,25 +652,28 @@ def main() -> None:
                     f_out.write(line)
 
         dump_final_no_cluster = Dump(dump_final_no_cluster_path)
-        sigma = lammps_util.calc_surface(dump_final_no_cluster, run_dir, LATTICE, ZERO_LVL)
-        #save_table(run_dir / 'surface_table.txt', surface_data, mode='w')
-        lammps_util.save_table(SURFACE_TABLE, [[run_num, sigma]], mode='a')
+        sigma = lammps_util.calc_surface(
+            dump_final_no_cluster, run_dir, LATTICE, ZERO_LVL
+        )
+        # save_table(run_dir / 'surface_table.txt', surface_data, mode='w')
+        lammps_util.save_table(SURFACE_TABLE, [[run_num, sigma]], mode="a")
 
         dump_cluster_id = Dump(dump_crater_id_path)
-        if (len(dump_cluster_id['id']) > 0):
-            vac_ids = " ".join(map(str, map(int, dump_cluster_id['id'])))
+        if len(dump_cluster_id["id"]) > 0:
+            vac_ids = " ".join(map(str, map(int, dump_cluster_id["id"])))
 
-            lammps_util.lammps_run(SCRIPT_DIR / 'in.crater',
+            lammps_util.lammps_run(
+                SCRIPT_DIR / "in.crater",
                 [
-                    ('input_file', input_file),
-                    ('dump_crater', dump_crater_path),
-                    ('vac_ids', vac_ids)
-                ]
+                    ("input_file", input_file),
+                    ("dump_crater", dump_crater_path),
+                    ("vac_ids", vac_ids),
+                ],
             )
 
             dump_crater = Dump(dump_crater_path)
             crater_info = get_crater_info(dump_crater, run_num)
-            lammps_util.save_table(CRATER_TABLE, crater_info, mode='a')
+            lammps_util.save_table(CRATER_TABLE, crater_info, mode="a")
 
     clusters_parse(CLUSTERS_TABLE)
     clusters_parse_sum(CLUSTERS_TABLE)
