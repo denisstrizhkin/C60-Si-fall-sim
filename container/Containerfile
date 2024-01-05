@@ -30,5 +30,7 @@ RUN echo 'dev-python/pillow webp' >> /etc/portage/package.use \
 
 RUN emerge numpy matplotlib
 
+RUN emerge virtualenv
+
 RUN rm -rf /var/cache/distfiles \
   && emerge -c
