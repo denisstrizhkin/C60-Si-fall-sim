@@ -3,8 +3,6 @@
 import numpy as np
 from pathlib import Path
 import argparse
-import os
-from os import path
 import tempfile
 
 import lammps_util
@@ -87,23 +85,44 @@ def parse_args():
         help="Set input file.",
     )
 
+    parser.add_argument(
+        "--mol-file",
+        action="store",
+        required=True,
+        type=str,
+        help="Set C60 molecule file.",
+    )
+
+    parser.add_argument(
+        "--estop-table",
+        action="store",
+        required=True,
+        type=str,
+        help="Set electron stopping table file.",
+    )
+
+    parser.add_argument(
+        "--script-dir",
+        action="store",
+        required=True,
+        type=str,
+        help="Set directory containing input scripts",
+    )
+
     return parser.parse_args()
 
 
-WORKDIR: Path = Path('../')
-
 ARGS = parse_args()
 
-OUT_DIR: Path = WORKDIR / ARGS.results_dir
+OUT_DIR: Path = ARGS.results_dir
 if not OUT_DIR.exists():
-    os.mkdir(OUT_DIR)
+    OUT_DIR.mkdir()
 
 INPUT_FILE: Path = Path(ARGS.input_file)
-INPUT_DIR: Path = INPUT_FILE.parent
-MOL_FILE: Path = INPUT_DIR / 'mol.C60'
-ELSTOP_TABLE: Path = INPUT_DIR / 'elstop-table.txt'
+MOL_FILE: Path = Path(ARGS.mol_file)
+ELSTOP_TABLE: Path = Path(ARGS.estop_table)
 
-SCRIPT_DIR: Path = WORKDIR / "./new_run"
+SCRIPT_DIR: Path = Path(ARGS.script_dir)
 
 OMP_THREADS: int = ARGS.omp_threads
 MPI_CORES: int = ARGS.mpi_cores
@@ -128,7 +147,7 @@ TMP: Path = Path(tempfile.gettempdir())
 SI_ATOM_TYPE: int = 1
 C_ATOM_TYPE: int = 2
 
-ZERO_LVL: float = lammps_util.calc_zero_lvl(WORKDIR / INPUT_FILE, WORKDIR / 'in.zero_lvl')
+ZERO_LVL: float = lammps_util.calc_zero_lvl(INPUT_FILE, SCRIPT_DIR / 'in.zero_lvl')
 
 RUN_TIME: int
 if ARGS.run_time is not None:
@@ -370,7 +389,7 @@ def clusters_parse(file_path):
         cluster_index += 1
 
     header_str = "simN\t" + "\t".join(clusters_dic.keys())
-    output_path = path.splitext(file_path)[0] + "_parsed" + path.splitext(file_path)[1]
+    output_path = lammps_util.file_without_suffix(file_path) + "_parsed" + lammps_util.file_get_suffix(file_path)
     lammps_util.save_table(output_path, table, header_str, dtype="d")
 
 
@@ -398,10 +417,7 @@ def clusters_parse_sum(file_path):
           table[i - 1][3] = table[i - 1][1] + table[i - 1][2]
 
     header_str = "simN Si C"
-    output_path = (
-            path.splitext(file_path)[0] + "_parsed_sum" + path.splitext(file_path)[1]
-    )
-
+    output_path = lammps_util.file_without_suffix(file_path) + "_parsed_sum" + lammps_util.file_get_suffix(file_path)
     lammps_util.save_table(output_path, table, header_str, dtype="d")
 
 
@@ -437,19 +453,11 @@ def clusters_parse_angle_dist(file_path):
     print(number_table[:,:10])
 
     header_str_number = "angle N1 N2 N3 ... N50"
-    output_path_number = (
-            path.splitext(file_path)[0]
-            + "_parsed_number_dist"
-            + path.splitext(file_path)[1]
-    )
+    output_path_number = lammps_util.file_without_suffix(file_path) + "_parsed_number_dist" + lammps_util.file_get_suffix(file_path)
     lammps_util.save_table(output_path_number, number_table, header_str_number)
 
     header_str_energy = "angle E1 E2 E3 ... E50"
-    output_path_energy = (
-            path.splitext(file_path)[0]
-            + "_parsed_energy_dist"
-            + path.splitext(file_path)[1]
-    )
+    output_path_energy = lammps_util.file_without_suffix(file_path) + "_parsed_energy_dist" + lammps_util.file_get_suffix(file_path)
     lammps_util.save_table(output_path_energy, energy_table, header_str_energy)
 
 
@@ -488,17 +496,17 @@ def carbon_dist_parse(file_path):
 
     header_str = "simN " + " ".join(list(map(str, bins)))
 
-    output_path = path.splitext(file_path)[0] + "_parsed" + path.splitext(file_path)[1]
+    output_path = lammps_util.file_without_suffix(file_path) + "_parsed" + lammps_util.file_get_suffix(file_path)
     lammps_util.save_table(output_path, table.T, header_str)
 
 
 def main() -> None:
-    input_file: Path = WORKDIR / INPUT_FILE
+    input_file: Path = INPUT_FILE
     for i in range(N_RUNS):
         run_num = i + 1
         run_dir: Path = OUT_DIR / f"run_{run_num}"
         if not run_dir.exists():
-            os.mkdir(run_dir)
+            run_dir.mkdir()
 
         def rnd_coord(coord):
             return coord + (np.random.rand() * 2 - 1) * LATTICE * 5
@@ -515,13 +523,13 @@ def main() -> None:
         dump_crater_id_path: Path = run_dir / 'dump.crater_id'
 
         log_file: Path = run_dir / 'log.lammps'
-        write_file = WORKDIR / 'tmp.input.data'
+        write_file = TMP / 'tmp.input.data'
 
         print(input_file)
         vars = [
             ('input_file', str(input_file)),
-            ('mol_file', str(WORKDIR / MOL_FILE)),
-            ('elstop_table', str(WORKDIR / ELSTOP_TABLE)),
+            ('mol_file', str(MOL_FILE)),
+            ('elstop_table', str(ELSTOP_TABLE)),
 
             ('lattice', str(LATTICE)),
             ('Si_top', str(ZERO_LVL + 0.5)),
@@ -545,9 +553,8 @@ def main() -> None:
             ('write_file', str(write_file))
         ]
 
-        workdir=Path('../')
         lammps_util.lammps_run(
-            WORKDIR / 'new_run/in.fall',
+            SCRIPT_DIR / 'in.fall',
             vars, omp_threads=OMP_THREADS,
             mpi_cores=MPI_CORES,
             log_file=log_file
@@ -609,7 +616,7 @@ def main() -> None:
         if (len(dump_cluster_id['id']) > 0):
             vac_ids = " ".join(map(str, map(int, dump_cluster_id['id'])))
 
-            lammps_util.lammps_run(WORKDIR / 'new_run/in.crater',
+            lammps_util.lammps_run(SCRIPT_DIR / 'in.crater',
                 [
                     ('input_file', input_file),
                     ('dump_crater', dump_crater_path),
@@ -626,7 +633,7 @@ def main() -> None:
     clusters_parse_angle_dist(CLUSTERS_TABLE)
     carbon_dist_parse(CARBON_DIST)
 
-    os.system(f'tar cvzf {OUT_DIR}.tar.gz {OUT_DIR}/*')
+    lammps_util.create_archive(OUT_DIR)
     print("*** FINISHED COMPLETELY ***")
 
 
