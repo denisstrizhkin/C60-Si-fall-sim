@@ -118,6 +118,8 @@ OUT_DIR: Path = Path(ARGS.results_dir)
 if not OUT_DIR.exists():
     OUT_DIR.mkdir()
 
+lammps_util.setup_root_logger(OUT_DIR / "run.log")
+
 INPUT_FILE: Path = Path(ARGS.input_file)
 MOL_FILE: Path = Path(ARGS.mol_file)
 ELSTOP_TABLE: Path = Path(ARGS.estop_table)
@@ -147,9 +149,7 @@ TMP: Path = Path(tempfile.gettempdir())
 SI_ATOM_TYPE: int = 1
 C_ATOM_TYPE: int = 2
 
-ZERO_LVL: float = lammps_util.calc_zero_lvl(
-    INPUT_FILE, SCRIPT_DIR / "in.zero_lvl"
-)
+ZERO_LVL: float = lammps_util.calc_zero_lvl(INPUT_FILE, SCRIPT_DIR / "in.zero_lvl")
 
 RUN_TIME: int
 if ARGS.run_time is not None:
@@ -323,9 +323,7 @@ def get_carbon_hist(carbon):
 
     right = int(np.ceil(z_coords.max(initial=float("-inf"))))
     left = int(np.floor(z_coords.min(initial=float("+inf"))))
-    hist, bins = np.histogram(
-        z_coords, bins=(right - left), range=(left, right)
-    )
+    hist, bins = np.histogram(z_coords, bins=(right - left), range=(left, right))
     length = len(hist)
     hist = np.concatenate(
         ((bins[1:] - 0.5).reshape(length, 1), hist.reshape(length, 1)), axis=1
@@ -624,9 +622,7 @@ def main() -> None:
 
         carbon = get_carbon(dump_final, carbon_sputtered)
         carbon_hist = get_carbon_hist(carbon)
-        lammps_util.save_table(
-            CARBON_DIST, carbon_hist, header=str(run_num), mode="a"
-        )
+        lammps_util.save_table(CARBON_DIST, carbon_hist, header=str(run_num), mode="a")
         carbon_info = get_carbon_info(carbon, fu_x, fu_y, run_num)
         lammps_util.save_table(CARBON_TABLE, carbon_info, mode="a")
 
