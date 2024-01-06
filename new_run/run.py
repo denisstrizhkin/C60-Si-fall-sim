@@ -661,8 +661,8 @@ def main() -> None:
             lammps_util.lammps_run(
                 SCRIPT_DIR / "in.crater",
                 [
-                    ("input_file", input_file),
-                    ("dump_crater", dump_crater_path),
+                    ("input_file", str(input_file)),
+                    ("dump_crater", str(dump_crater_path)),
                     ("vac_ids", vac_ids),
                 ],
             )
