@@ -4,6 +4,8 @@ import numpy as np
 from pathlib import Path
 import argparse
 import tempfile
+import json
+import shutil
 
 import lammps_util
 from lammps_util import Dump, Atom, Cluster
@@ -149,7 +151,9 @@ TMP: Path = Path(tempfile.gettempdir())
 SI_ATOM_TYPE: int = 1
 C_ATOM_TYPE: int = 2
 
-ZERO_LVL: float = lammps_util.calc_zero_lvl(INPUT_FILE, SCRIPT_DIR / "in.zero_lvl")
+ZERO_LVL: float = lammps_util.calc_zero_lvl(
+    INPUT_FILE, SCRIPT_DIR / "in.zero_lvl"
+)
 
 RUN_TIME: int
 if ARGS.run_time is not None:
@@ -323,7 +327,9 @@ def get_carbon_hist(carbon):
 
     right = int(np.ceil(z_coords.max(initial=float("-inf"))))
     left = int(np.floor(z_coords.min(initial=float("+inf"))))
-    hist, bins = np.histogram(z_coords, bins=(right - left), range=(left, right))
+    hist, bins = np.histogram(
+        z_coords, bins=(right - left), range=(left, right)
+    )
     length = len(hist)
     hist = np.concatenate(
         ((bins[1:] - 0.5).reshape(length, 1), hist.reshape(length, 1)), axis=1
@@ -544,8 +550,10 @@ def carbon_dist_parse(file_path):
 
 def main() -> None:
     input_file: Path = INPUT_FILE
-    for i in range(N_RUNS):
-        run_num = i + 1
+    run_i: int = 0
+
+    while run_i < N_RUNS:
+        run_num = run_i + 1
         run_dir: Path = OUT_DIR / f"run_{run_num}"
         if not run_dir.exists():
             run_dir.mkdir()
@@ -567,7 +575,6 @@ def main() -> None:
         log_file: Path = run_dir / "log.lammps"
         write_file = TMP / "tmp.input.data"
 
-        print(input_file)
         vars = [
             ("input_file", str(input_file)),
             ("mol_file", str(MOL_FILE)),
@@ -589,14 +596,22 @@ def main() -> None:
             ("dump_crater_id", str(dump_crater_id_path)),
             ("write_file", str(write_file)),
         ]
+        vars_path: Path = run_dir / "vars.json"
+        with open(vars_path) as f:
+            f.write(json.dump(vars))
+        shutil.copy(input_file, run_dir / "input.data")
 
-        lammps_util.lammps_run(
-            SCRIPT_DIR / "in.fall",
-            vars,
-            omp_threads=OMP_THREADS,
-            mpi_cores=MPI_CORES,
-            log_file=log_file,
-        )
+        if (
+            lammps_util.lammps_run(
+                SCRIPT_DIR / "in.fall",
+                vars,
+                omp_threads=OMP_THREADS,
+                mpi_cores=MPI_CORES,
+                log_file=log_file,
+            )
+            != 0
+        ):
+            continue
         # TODO do something about this already
         # input_file = write_file
 
@@ -622,7 +637,9 @@ def main() -> None:
 
         carbon = get_carbon(dump_final, carbon_sputtered)
         carbon_hist = get_carbon_hist(carbon)
-        lammps_util.save_table(CARBON_DIST, carbon_hist, header=str(run_num), mode="a")
+        lammps_util.save_table(
+            CARBON_DIST, carbon_hist, header=str(run_num), mode="a"
+        )
         carbon_info = get_carbon_info(carbon, fu_x, fu_y, run_num)
         lammps_util.save_table(CARBON_TABLE, carbon_info, mode="a")
 
@@ -658,18 +675,24 @@ def main() -> None:
         if len(dump_cluster_id["id"]) > 0:
             vac_ids = " ".join(map(str, map(int, dump_cluster_id["id"])))
 
-            lammps_util.lammps_run(
-                SCRIPT_DIR / "in.crater",
-                [
-                    ("input_file", str(input_file)),
-                    ("dump_crater", str(dump_crater_path)),
-                    ("vac_ids", vac_ids),
-                ],
-            )
+            if (
+                lammps_util.lammps_run(
+                    SCRIPT_DIR / "in.crater",
+                    [
+                        ("input_file", str(input_file)),
+                        ("dump_crater", str(dump_crater_path)),
+                        ("vac_ids", vac_ids),
+                    ],
+                )
+                != 0
+            ):
+                continue
 
             dump_crater = Dump(dump_crater_path)
             crater_info = get_crater_info(dump_crater, run_num)
             lammps_util.save_table(CRATER_TABLE, crater_info, mode="a")
+
+        run_i += 1
 
     clusters_parse(CLUSTERS_TABLE)
     clusters_parse_sum(CLUSTERS_TABLE)
