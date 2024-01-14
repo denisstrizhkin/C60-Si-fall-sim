@@ -630,18 +630,11 @@ def main() -> None:
             cluster_dic[key] = Cluster(cluster_dic_atoms[key], SI_ATOM_TYPE)
 
         clusters_table = get_clusters_table(cluster_dic, run_num).astype(float)
-        lammps_util.save_table(CLUSTERS_TABLE, clusters_table, mode="a")
-
         rim_info = get_rim_info(rim_atoms, fu_x, fu_y, run_num)
-        lammps_util.save_table(RIM_TABLE, rim_info, mode="a")
 
         carbon = get_carbon(dump_final, carbon_sputtered)
         carbon_hist = get_carbon_hist(carbon)
-        lammps_util.save_table(
-            CARBON_DIST, carbon_hist, header=str(run_num), mode="a"
-        )
         carbon_info = get_carbon_info(carbon, fu_x, fu_y, run_num)
-        lammps_util.save_table(CARBON_TABLE, carbon_info, mode="a")
 
         ids_to_delete = []
         if len(cluster_dic.keys()) != 0:
@@ -668,8 +661,6 @@ def main() -> None:
         sigma = lammps_util.calc_surface(
             dump_final_no_cluster, run_dir, LATTICE, ZERO_LVL
         )
-        # save_table(run_dir / 'surface_table.txt', surface_data, mode='w')
-        lammps_util.save_table(SURFACE_TABLE, [[run_num, sigma]], mode="a")
 
         dump_cluster_id = Dump(dump_crater_id_path)
         if len(dump_cluster_id["id"]) > 0:
@@ -691,6 +682,15 @@ def main() -> None:
             dump_crater = Dump(dump_crater_path)
             crater_info = get_crater_info(dump_crater, run_num)
             lammps_util.save_table(CRATER_TABLE, crater_info, mode="a")
+
+        lammps_util.save_table(CLUSTERS_TABLE, clusters_table, mode="a")
+        lammps_util.save_table(RIM_TABLE, rim_info, mode="a")
+        lammps_util.save_table(
+            CARBON_DIST, carbon_hist, header=str(run_num), mode="a"
+        )
+        lammps_util.save_table(CARBON_TABLE, carbon_info, mode="a")
+        # save_table(run_dir / 'surface_table.txt', surface_data, mode='w')
+        lammps_util.save_table(SURFACE_TABLE, [[run_num, sigma]], mode="a")
 
         run_i += 1
 
