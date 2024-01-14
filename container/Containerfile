@@ -1,36 +1,24 @@
 FROM gentoo/stage3:nomultilib
 
-RUN emerge-webrsync
+RUN emerge-webrsync && emerge --sync
 
 RUN rmdir /etc/portage/{package.use,package.accept_keywords,package.mask} \
   && echo 'FEATURES="-ipc-sandbox -network-sandbox -pid-sandbox"' >> /etc/portage/make.conf
 
-RUN emerge -1q dev-vcs/git eselect-repository
+RUN echo 'sci-physics/lammps' > /etc/portage/package.accept_keywords
 
-RUN eselect repository create local
-
-WORKDIR /var/db/repos/local/sci-physics/lammps
-
-RUN cp /var/db/repos/gentoo/sci-physics/lammps/metadata.xml . 
-
-COPY lammps-20230802.ebuild .
-
-RUN echo 'sci-physics/lammps extra mpi opencl openmp cuda python' > /etc/portage/package.use \
+RUN echo 'sci-physics/lammps extra mpi opencl openmp python' > /etc/portage/package.use \
   && echo 'sci-libs/netcdf mpi' >> /etc/portage/package.use \
   && echo 'sci-libs/hdf5 mpi' >> /etc/portage/package.use \
   && echo 'virtual/mpi romio' >> /etc/portage/package.use
 
-RUN ebuild lammps-20230802.ebuild manifest
-
-RUN emerge lammps
+RUN emerge -j 5 lammps
 
 RUN echo 'dev-python/pillow webp' >> /etc/portage/package.use \
   && echo 'virtual/imagemagick-tools tiff jpeg' >> /etc/portage/package.use \
   && echo 'media-gfx/imagemagick tiff jpeg' >> /etc/portage/package.use
 
-RUN emerge numpy matplotlib
-
-RUN emerge virtualenv
+RUN emerge -j 5 numpy matplotlib virtualenv
 
 RUN rm -rf /var/cache/distfiles \
   && emerge -c

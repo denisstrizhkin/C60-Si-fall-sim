@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-
-docker run --rm -it --gpus all -v $(pwd):/var/workdir -u $(id -u):$(id -g) lammpscuda
