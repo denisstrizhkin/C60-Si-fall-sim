@@ -597,8 +597,8 @@ def main() -> None:
             ("write_file", str(write_file)),
         ]
         vars_path: Path = run_dir / "vars.json"
-        with open(vars_path) as f:
-            f.write(json.dump(vars))
+        with open(vars_path, encoding="utf-8", mode="w") as f:
+            json.dump(vars, f)
         shutil.copy(input_file, run_dir / "input.data")
 
         if (
