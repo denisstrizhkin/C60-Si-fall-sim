@@ -702,6 +702,11 @@ def main() -> None:
     lammps_util.create_archive(OUT_DIR)
     print("*** FINISHED COMPLETELY ***")
 
+    with open(Path("./runs.log"), encoding="utf-8", mode="a") as f:
+        f.write(
+            f"{OUT_DIR.name} {INPUT_FILE.name} {ENERGY} {TEMPERATURE} {N_RUNS}\n"
+        )
+
 
 if __name__ == "__main__":
     main()
