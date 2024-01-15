@@ -132,6 +132,7 @@ OMP_THREADS: int = ARGS.omp_threads
 MPI_CORES: int = ARGS.mpi_cores
 
 N_RUNS: int = ARGS.runs
+IS_MULTIFALL: bool = True
 ENERGY: float = ARGS.energy
 TEMPERATURE: float = ARGS.temperature
 
@@ -142,6 +143,7 @@ SI_TOP: float = 15.3
 C60_X: float = 0
 C60_Y: float = 0
 C60_Z_OFFSET: float = 100
+C60_WIDTH: int = 10
 
 IS_ALL_DUMP: bool = True
 ALL_DUMP_INTERVAL: int = 20
@@ -559,7 +561,7 @@ def main() -> None:
             run_dir.mkdir()
 
         def rnd_coord(coord):
-            return coord + (np.random.rand() * 2 - 1) * LATTICE * 5
+            return coord + (np.random.rand() * 2 - 1) * LATTICE * (C60_WIDTH / 2)
 
         fu_x = rnd_coord(C60_X)
         fu_y = rnd_coord(C60_Y)
@@ -612,8 +614,9 @@ def main() -> None:
             != 0
         ):
             continue
-        # TODO do something about this already
-        # input_file = write_file
+
+        if IS_MULTIFALL:
+            input_file = write_file
 
         dump_cluster = Dump(dump_cluster_path)
         dump_final = Dump(dump_final_path)
@@ -659,11 +662,11 @@ def main() -> None:
 
         dump_final_no_cluster = Dump(dump_final_no_cluster_path)
         sigma = lammps_util.calc_surface(
-            dump_final_no_cluster, run_dir, LATTICE, ZERO_LVL
+            dump_final_no_cluster, run_dir, LATTICE, ZERO_LVL, C60_WIDTH
         )
 
         dump_cluster_id = Dump(dump_crater_id_path)
-        if len(dump_cluster_id["id"]) > 0:
+        if len(dump_cluster_id["id"]) > 0 and not IS_MULTIFALL:
             vac_ids = " ".join(map(str, map(int, dump_cluster_id["id"])))
 
             if (
