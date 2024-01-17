@@ -120,7 +120,7 @@ fix dt dt_reset dt/reset 1 $(v_step/10) $(v_step) 0.1
 
 
 ### dumps ###
-# dump during all custom 1 ${dump_during} id type x y z c_atom_ke
+# dump during all custom 10 ${dump_during} id type x y z c_atom_ke
 
 
 ### run simulation ###
@@ -152,12 +152,13 @@ run 0
 undump clusters
 undump final
 
-# fix tbath nve temp/berendsen ${temperature} ${temperature} 0.001
-# run 1000 
-#
-# unfix tbath
-# fix tbath thermostat temp/berendsen ${temperature} ${temperature} 0.001
-# run 1000
+unfix tbath
+fix tbath nve temp/berendsen ${temperature} ${temperature} 0.001
+run 1000 
+
+unfix tbath
+fix tbath thermostat temp/berendsen ${temperature} ${temperature} 0.001
+run 1000
 
 group vac variable is_vacancy static
 write_dump vac custom ${dump_crater_id} id
