@@ -2,8 +2,12 @@ FROM gentoo/stage3:nomultilib
 
 RUN emerge-webrsync && emerge --sync
 
+RUN emerge getuto && getuto
+
 RUN rmdir /etc/portage/{package.use,package.accept_keywords,package.mask} \
   && echo 'FEATURES="-ipc-sandbox -network-sandbox -pid-sandbox"' >> /etc/portage/make.conf
+
+RUN emerge -j 5 -DNug @world
 
 RUN echo 'sci-physics/lammps' > /etc/portage/package.accept_keywords
 
@@ -12,13 +16,17 @@ RUN echo 'sci-physics/lammps extra mpi opencl openmp python' > /etc/portage/pack
   && echo 'sci-libs/hdf5 mpi' >> /etc/portage/package.use \
   && echo 'virtual/mpi romio' >> /etc/portage/package.use
 
-RUN emerge -j 5 lammps
+RUN emerge -j 5 -g lammps
 
 RUN echo 'dev-python/pillow webp' >> /etc/portage/package.use \
   && echo 'virtual/imagemagick-tools tiff jpeg' >> /etc/portage/package.use \
   && echo 'media-gfx/imagemagick tiff jpeg' >> /etc/portage/package.use
 
-RUN emerge -j 5 numpy matplotlib virtualenv
+RUN emerge -j 5 -g numpy matplotlib virtualenv
+
+RUN emerge -j 5 -g black mypy python-lsp-server
+
+RUN emerge -j 5 -gu sudo app-crypt/gnupg app-crypt/pinentry bash bash-completion dev-vcs/git curl sys-devel/bc lsof
 
 RUN rm -rf /var/cache/distfiles \
   && emerge -c
