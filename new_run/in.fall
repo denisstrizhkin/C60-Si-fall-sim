@@ -10,7 +10,7 @@ balance 1.0 shift xyz 10 1.0
 
 ### variables ###
 variable fixed_width equal '0.5 * v_lattice'
-variable bath_floor_top equal 'zlo + 1 + v_fixed_width'
+variable bath_floor_top equal 'zlo + 1 * v_lattice + v_fixed_width'
 variable Si_fixed_top equal 'zlo + v_fixed_width'
 variable C60_z equal 'v_C60_z_offset + v_Si_top'
 variable C60_vel equal '-sqrt(v_energy * 1000) * 5.174 '
@@ -78,7 +78,7 @@ group Si type 1
 
 group Si_fixed region Si_fixed
 group nve subtract all Si_fixed
-group thermostat dynamic Si region bath every 1
+group thermostat dynamic Si region floor every 1
 
 group dt_reset dynamic all region dt_reset every 10
 
