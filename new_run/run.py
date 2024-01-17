@@ -572,7 +572,9 @@ def main() -> None:
             run_dir.mkdir()
 
         def rnd_coord(coord):
-            return coord + (np.random.rand() * 2 - 1) * LATTICE * (C60_WIDTH / 2)
+            return coord + (np.random.rand() * 2 - 1) * LATTICE * (
+                C60_WIDTH / 2
+            )
 
         fu_x = rnd_coord(C60_X)
         fu_y = rnd_coord(C60_Y)
@@ -629,9 +631,6 @@ def main() -> None:
         ):
             continue
 
-        if IS_MULTIFALL:
-            input_file = write_file
-
         dump_cluster = Dump(dump_cluster_path)
         dump_final = Dump(dump_final_path)
 
@@ -661,18 +660,15 @@ def main() -> None:
             ids_to_delete = list(map(int, ids_to_delete))
 
         dump_final_no_cluster_path = run_dir / "dump.final_no_cluster"
-        with open(dump_final_path, "r") as f_in, open(
-            dump_final_no_cluster_path, "w"
-        ) as f_out:
-            cnt = -1
-            for line in f_in:
-                cnt += 1
-                if cnt < 9:
-                    f_out.write(line)
-                    continue
-
-                if not int(line.split()[0]) in ids_to_delete:
-                    f_out.write(line)
+        lammps_util.dump_delete_atoms(
+            dump_final_path, dump_final_no_cluster_path, ids_to_delete
+        )
+        if IS_MULTIFALL:
+            write_file_no_clusters = TMP / "tmp_no_cluster.input.data"
+            lammps_util.input_delete_atoms(
+                write_file, write_file_no_clusters, ids_to_delete
+            )
+            input_file = write_file_no_clusters
 
         dump_final_no_cluster = Dump(dump_final_no_cluster_path)
         sigma = lammps_util.calc_surface(
