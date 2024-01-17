@@ -44,6 +44,15 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--run-start-i",
+        action="store",
+        required=False,
+        default=0,
+        type=int,
+        help="Starting sumulation index",
+    )
+
+    parser.add_argument(
         "--run-time",
         action="store",
         required=False,
@@ -153,9 +162,10 @@ TMP: Path = Path(tempfile.gettempdir())
 SI_ATOM_TYPE: int = 1
 C_ATOM_TYPE: int = 2
 
-ZERO_LVL: float = lammps_util.calc_zero_lvl(
-    INPUT_FILE, SCRIPT_DIR / "in.zero_lvl"
-)
+# ZERO_LVL: float = lammps_util.calc_zero_lvl(
+#     INPUT_FILE, SCRIPT_DIR / "in.zero_lvl"
+# )
+ZERO_LVL: float = 82.7813
 
 RUN_TIME: int
 if ARGS.run_time is not None:
@@ -180,13 +190,14 @@ def write_header(header_str, table_path):
         f.write("# " + header_str + "\n")
 
 
-write_header("sim_num N_Si N_C mass Px Py Pz Ek angle", CLUSTERS_TABLE)
-write_header("sim_num N r_mean r_max z_mean z_max", RIM_TABLE)
-write_header("sim_num N r_mean r_max", CARBON_TABLE)
-write_header("sim_num N V S z_mean z_min", CRATER_TABLE)
-write_header("z count", CARBON_DIST)
-write_header("sim_num sigma", SURFACE_TABLE)
-# write_header("sim_num id Si C Sum", COORD_NUM_TABLE)
+if ARGS.run_start_i == 0:
+    write_header("sim_num N_Si N_C mass Px Py Pz Ek angle", CLUSTERS_TABLE)
+    write_header("sim_num N r_mean r_max z_mean z_max", RIM_TABLE)
+    write_header("sim_num N r_mean r_max", CARBON_TABLE)
+    write_header("sim_num N V S z_mean z_min", CRATER_TABLE)
+    write_header("z count", CARBON_DIST)
+    write_header("sim_num sigma", SURFACE_TABLE)
+    # write_header("sim_num id Si C Sum", COORD_NUM_TABLE)
 
 
 def extract_ids_var(lmp, name, group):
@@ -552,7 +563,7 @@ def carbon_dist_parse(file_path):
 
 def main() -> None:
     input_file: Path = INPUT_FILE
-    run_i: int = 0
+    run_i: int = ARGS.run_start_i
 
     while run_i < N_RUNS:
         run_num = run_i + 1
@@ -601,7 +612,10 @@ def main() -> None:
         vars_path: Path = run_dir / "vars.json"
         with open(vars_path, encoding="utf-8", mode="w") as f:
             json.dump(vars, f)
-        shutil.copy(input_file, run_dir / "input.data")
+
+        backup_input_file: Path = run_dir / "input.data"
+        if input_file != backup_input_file:
+            shutil.copy(input_file, backup_input_file)
 
         if (
             lammps_util.lammps_run(
