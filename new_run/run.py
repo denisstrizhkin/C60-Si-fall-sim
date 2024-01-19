@@ -572,9 +572,7 @@ def main() -> None:
             run_dir.mkdir()
 
         def rnd_coord(coord):
-            return coord + (np.random.rand() * 2 - 1) * LATTICE * (
-                C60_WIDTH / 2
-            )
+            return coord + (np.random.rand() * 2 - 1) * LATTICE * C60_WIDTH
 
         fu_x = rnd_coord(C60_X)
         fu_y = rnd_coord(C60_Y)
