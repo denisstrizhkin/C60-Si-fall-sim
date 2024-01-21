@@ -44,15 +44,6 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--run-start-i",
-        action="store",
-        required=False,
-        default=0,
-        type=int,
-        help="Starting sumulation index",
-    )
-
-    parser.add_argument(
         "--run-time",
         action="store",
         required=False,
@@ -97,6 +88,14 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--input-vars",
+        action="store",
+        required=False,
+        type=str,
+        help="Set input vars.",
+    )
+
+    parser.add_argument(
         "--mol-file",
         action="store",
         required=True,
@@ -131,6 +130,7 @@ if not OUT_DIR.exists():
 
 lammps_util.setup_root_logger(OUT_DIR / "run.log")
 
+INPUT_VARS: Path = Path(ARGS.input_vars)
 INPUT_FILE: Path = Path(ARGS.input_file)
 MOL_FILE: Path = Path(ARGS.mol_file)
 ELSTOP_TABLE: Path = Path(ARGS.estop_table)
@@ -152,7 +152,7 @@ SI_TOP: float = 15.3
 C60_X: float = 0
 C60_Y: float = 0
 C60_Z_OFFSET: float = 100
-C60_WIDTH: int = 10
+C60_WIDTH: int = 20
 
 IS_ALL_DUMP: bool = True
 ALL_DUMP_INTERVAL: int = 20
@@ -175,6 +175,14 @@ elif ENERGY < 8_000:
 else:
     RUN_TIME = int(ENERGY * (5 / 4))
 
+if INPUT_VARS is not None:
+    with open(INPUT_VARS, encoding="utf-8", mode="r") as f:
+        VARS = json.load(f)
+    START_I = int([pair for pair in vars if pair[0] == "run_i"][0][1])
+else:
+    VARS = None
+    START_I: int = 0
+
 
 CLUSTERS_TABLE: Path = OUT_DIR / "clusters_table.txt"
 RIM_TABLE: Path = OUT_DIR / "rim_table.txt"
@@ -190,7 +198,7 @@ def write_header(header_str, table_path):
         f.write("# " + header_str + "\n")
 
 
-if ARGS.run_start_i == 0:
+if START_I == 0:
     write_header("sim_num N_Si N_C mass Px Py Pz Ek angle", CLUSTERS_TABLE)
     write_header("sim_num N r_mean r_max z_mean z_max", RIM_TABLE)
     write_header("sim_num N r_mean r_max", CARBON_TABLE)
@@ -562,8 +570,9 @@ def carbon_dist_parse(file_path):
 
 
 def main() -> None:
+    vars = VARS
+    run_i: int = START_I
     input_file: Path = INPUT_FILE
-    run_i: int = ARGS.run_start_i
 
     while run_i < N_RUNS:
         run_num = run_i + 1
@@ -588,27 +597,30 @@ def main() -> None:
         log_file: Path = run_dir / "log.lammps"
         write_file = TMP / "tmp.input.data"
 
-        vars = [
-            ("input_file", str(input_file)),
-            ("mol_file", str(MOL_FILE)),
-            ("elstop_table", str(ELSTOP_TABLE)),
-            ("lattice", str(LATTICE)),
-            ("Si_top", str(ZERO_LVL + 0.5)),
-            ("C60_z_offset", str(C60_Z_OFFSET)),
-            ("C60_y", str(fu_y)),
-            ("C60_x", str(fu_x)),
-            ("step", str(STEP)),
-            ("temperature", str(TEMPERATURE)),
-            ("energy", str(ENERGY)),
-            ("zero_lvl", str(ZERO_LVL)),
-            ("vacs_restart_file", str(vacs_restart_file)),
-            ("run_time", str(RUN_TIME - 1000)),
-            ("dump_cluster", str(dump_cluster_path)),
-            ("dump_final", str(dump_final_path)),
-            ("dump_during", str(dump_during_path)),
-            ("dump_crater_id", str(dump_crater_id_path)),
-            ("write_file", str(write_file)),
-        ]
+        if vars is None:
+            vars = [
+                ("run_i", str(run_i)),
+                ("input_file", str(input_file)),
+                ("mol_file", str(MOL_FILE)),
+                ("elstop_table", str(ELSTOP_TABLE)),
+                ("lattice", str(LATTICE)),
+                ("Si_top", str(ZERO_LVL + 0.5)),
+                ("C60_z_offset", str(C60_Z_OFFSET)),
+                ("C60_y", str(fu_y)),
+                ("C60_x", str(fu_x)),
+                ("step", str(STEP)),
+                ("temperature", str(TEMPERATURE)),
+                ("energy", str(ENERGY)),
+                ("zero_lvl", str(ZERO_LVL)),
+                ("vacs_restart_file", str(vacs_restart_file)),
+                ("run_time", str(RUN_TIME - 1000)),
+                ("dump_cluster", str(dump_cluster_path)),
+                ("dump_final", str(dump_final_path)),
+                ("dump_during", str(dump_during_path)),
+                ("dump_crater_id", str(dump_crater_id_path)),
+                ("write_file", str(write_file)),
+            ]
+
         vars_path: Path = run_dir / "vars.json"
         with open(vars_path, encoding="utf-8", mode="w") as f:
             json.dump(vars, f)
@@ -628,6 +640,7 @@ def main() -> None:
             != 0
         ):
             continue
+        vars = None
 
         dump_cluster = Dump(dump_cluster_path)
         dump_final = Dump(dump_final_path)
