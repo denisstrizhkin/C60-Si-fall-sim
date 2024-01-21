@@ -178,7 +178,7 @@ else:
 if INPUT_VARS is not None:
     with open(INPUT_VARS, encoding="utf-8", mode="r") as f:
         VARS = json.load(f)
-    START_I = int([pair for pair in vars if pair[0] == "run_i"][0][1])
+    START_I = int([pair for pair in VARS if pair[0] == "run_i"][0][1]) - 1
 else:
     VARS = None
     START_I: int = 0
@@ -570,7 +570,6 @@ def carbon_dist_parse(file_path):
 
 
 def main() -> None:
-    vars = VARS
     run_i: int = START_I
     input_file: Path = INPUT_FILE
 
@@ -583,8 +582,12 @@ def main() -> None:
         def rnd_coord(coord):
             return coord + (np.random.rand() * 2 - 1) * LATTICE * C60_WIDTH
 
-        fu_x = rnd_coord(C60_X)
-        fu_y = rnd_coord(C60_Y)
+        if VARS is None:
+            fu_x = rnd_coord(C60_X)
+            fu_y = rnd_coord(C60_Y)
+        else:
+            fu_x = float([pair for pair in VARS if pair[0] == "C60_x"][0][1])
+            fu_y = float([pair for pair in VARS if pair[0] == "C60_y"][0][1])
 
         vacs_restart_file: Path = TMP / "vacs.restart"
 
@@ -597,29 +600,28 @@ def main() -> None:
         log_file: Path = run_dir / "log.lammps"
         write_file = TMP / "tmp.input.data"
 
-        if vars is None:
-            vars = [
-                ("run_i", str(run_i)),
-                ("input_file", str(input_file)),
-                ("mol_file", str(MOL_FILE)),
-                ("elstop_table", str(ELSTOP_TABLE)),
-                ("lattice", str(LATTICE)),
-                ("Si_top", str(ZERO_LVL + 0.5)),
-                ("C60_z_offset", str(C60_Z_OFFSET)),
-                ("C60_y", str(fu_y)),
-                ("C60_x", str(fu_x)),
-                ("step", str(STEP)),
-                ("temperature", str(TEMPERATURE)),
-                ("energy", str(ENERGY)),
-                ("zero_lvl", str(ZERO_LVL)),
-                ("vacs_restart_file", str(vacs_restart_file)),
-                ("run_time", str(RUN_TIME - 1000)),
-                ("dump_cluster", str(dump_cluster_path)),
-                ("dump_final", str(dump_final_path)),
-                ("dump_during", str(dump_during_path)),
-                ("dump_crater_id", str(dump_crater_id_path)),
-                ("write_file", str(write_file)),
-            ]
+        vars = [
+            ("run_i", str(run_i)),
+            ("input_file", str(input_file)),
+            ("mol_file", str(MOL_FILE)),
+            ("elstop_table", str(ELSTOP_TABLE)),
+            ("lattice", str(LATTICE)),
+            ("Si_top", str(ZERO_LVL + 0.5)),
+            ("C60_z_offset", str(C60_Z_OFFSET)),
+            ("C60_y", str(fu_y)),
+            ("C60_x", str(fu_x)),
+            ("step", str(STEP)),
+            ("temperature", str(TEMPERATURE)),
+            ("energy", str(ENERGY)),
+            ("zero_lvl", str(ZERO_LVL)),
+            ("vacs_restart_file", str(vacs_restart_file)),
+            ("run_time", str(RUN_TIME - 1000)),
+            ("dump_cluster", str(dump_cluster_path)),
+            ("dump_final", str(dump_final_path)),
+            ("dump_during", str(dump_during_path)),
+            ("dump_crater_id", str(dump_crater_id_path)),
+            ("write_file", str(write_file)),
+        ]
 
         vars_path: Path = run_dir / "vars.json"
         with open(vars_path, encoding="utf-8", mode="w") as f:
