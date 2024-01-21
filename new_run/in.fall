@@ -67,8 +67,10 @@ neigh_modify one 4000
 
 
 ### C60 molecule ###
+displace_atoms all move ${C60_x} ${C60_y} 0 units box
 molecule C60 ${mol_file}
-create_atoms 1 single ${C60_x} ${C60_y} ${C60_z} mol C60 1 units box
+create_atoms 1 single 0 0 ${C60_z} mol C60 1 units box
+# create_atoms 1 single ${C60_x} ${C60_y} ${C60_z} mol C60 1 units box
 group C60 region C60_box
 
 
@@ -78,7 +80,7 @@ group Si type 1
 
 group Si_fixed region Si_fixed
 group nve subtract all Si_fixed
-group thermostat dynamic Si region floor every 1
+group thermostat dynamic all region floor every 1
 
 group dt_reset dynamic all region dt_reset every 10
 
