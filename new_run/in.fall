@@ -158,7 +158,7 @@ run 1000
 
 unfix tbath
 fix tbath thermostat temp/berendsen ${temperature} ${temperature} 0.001
-run 1000
+run 2000
 
 group vac variable is_vacancy static
 write_dump vac custom ${dump_crater_id} id
