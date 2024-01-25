@@ -130,7 +130,9 @@ if not OUT_DIR.exists():
 
 lammps_util.setup_root_logger(OUT_DIR / "run.log")
 
-INPUT_VARS: Path = Path(ARGS.input_vars)
+if ARGS.input_vars is not None:
+    INPUT_VARS: Path = Path(ARGS.input_vars)
+
 INPUT_FILE: Path = Path(ARGS.input_file)
 MOL_FILE: Path = Path(ARGS.mol_file)
 ELSTOP_TABLE: Path = Path(ARGS.estop_table)
@@ -162,10 +164,11 @@ TMP: Path = Path(tempfile.gettempdir())
 SI_ATOM_TYPE: int = 1
 C_ATOM_TYPE: int = 2
 
-# ZERO_LVL: float = lammps_util.calc_zero_lvl(
-#     INPUT_FILE, SCRIPT_DIR / "in.zero_lvl"
-# )
-ZERO_LVL: float = 82.7813
+ZERO_LVL: float = lammps_util.calc_zero_lvl(
+    INPUT_FILE, SCRIPT_DIR / "in.zero_lvl"
+)
+# TODO load zero lvl from input vars
+# ZERO_LVL: float = 82.7813
 
 RUN_TIME: int
 if ARGS.run_time is not None:
@@ -178,7 +181,7 @@ else:
 if INPUT_VARS is not None:
     with open(INPUT_VARS, encoding="utf-8", mode="r") as f:
         VARS = json.load(f)
-    START_I = int([pair for pair in VARS if pair[0] == "run_i"][0][1]) - 1
+    START_I = int([pair for pair in VARS if pair[0] == "run_i"][0][1])
 else:
     VARS = None
     START_I: int = 0
