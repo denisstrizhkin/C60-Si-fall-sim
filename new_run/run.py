@@ -130,6 +130,7 @@ if not OUT_DIR.exists():
 
 lammps_util.setup_root_logger(OUT_DIR / "run.log")
 
+INPUT_VARS: Path | None = None
 if ARGS.input_vars is not None:
     INPUT_VARS: Path = Path(ARGS.input_vars)
 
