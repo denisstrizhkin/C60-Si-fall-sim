@@ -577,6 +577,8 @@ def carbon_dist_parse(file_path):
 
 
 def main() -> None:
+    global INPUT_VARS
+
     run_i: int = START_I
     input_file: Path = INPUT_FILE
 
@@ -589,12 +591,13 @@ def main() -> None:
         def rnd_coord(coord):
             return coord + (np.random.rand() * 2 - 1) * LATTICE * C60_WIDTH
 
-        if VARS is None:
+        if INPUT_VARS is None:
             fu_x = rnd_coord(C60_X)
             fu_y = rnd_coord(C60_Y)
         else:
-            fu_x = float([pair for pair in VARS if pair[0] == "C60_x"][0][1])
-            fu_y = float([pair for pair in VARS if pair[0] == "C60_y"][0][1])
+            fu_x = extract_vars_val("C60_x")
+            fu_y = extract_vars_val("C60_y")
+            INPUT_VARS = None
 
         vacs_restart_file: Path = TMP / "vacs.restart"
 
