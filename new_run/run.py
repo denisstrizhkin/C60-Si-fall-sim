@@ -595,8 +595,8 @@ def main() -> None:
             fu_x = rnd_coord(C60_X)
             fu_y = rnd_coord(C60_Y)
         else:
-            fu_x = extract_vars_val("C60_x")
-            fu_y = extract_vars_val("C60_y")
+            fu_x = float(extract_vars_val("C60_x"))
+            fu_y = float(extract_vars_val("C60_y"))
             INPUT_VARS = None
 
         vacs_restart_file: Path = TMP / "vacs.restart"
