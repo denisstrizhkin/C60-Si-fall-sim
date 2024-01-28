@@ -162,7 +162,9 @@ C60_WIDTH: int = 20
 IS_ALL_DUMP: bool = True
 ALL_DUMP_INTERVAL: int = 20
 
-TMP: Path = Path(tempfile.gettempdir())
+TMP: Path = Path(tempfile.gettempdir()) / OUT_DIR.name
+if not TMP.exists():
+    TMP.mkdir()
 
 SI_ATOM_TYPE: int = 1
 C_ATOM_TYPE: int = 2

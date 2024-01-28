@@ -2,9 +2,9 @@
 
 export LAMMPS_POTENTIALS=/usr/share/lammps/potentials
 
-input_file="../input_files/fall_700K_40_40_31.input.data"
-# input_dir="../results/multifall_width_40_0K_40_40_8keV_300/run_300/"
-# input_file="${input_dir}/input.data"
+# input_file="../input_files/fall_700K_40_40_31.input.data"
+input_dir="../results/multifall_width_40_700K_40_40_8keV_300/run_300/"
+input_file="${input_dir}/input.data"
 
 ./run.py \
   --omp-threads 0 \
@@ -12,7 +12,7 @@ input_file="../input_files/fall_700K_40_40_31.input.data"
   \
   --temperature "700" \
   --energy 8 \
-  --runs 300 \
+  --runs 600 \
   --run-time 5000 \
   \
   --results-dir '../results/multifall_width_40_700K_40_40_8keV_300' \
@@ -22,4 +22,4 @@ input_file="../input_files/fall_700K_40_40_31.input.data"
   --estop-table '../input_files/elstop-table.txt' \
   \
   --script-dir './' \
-  # --input-vars "${input_dir}/vars.json"
+  --input-vars "${input_dir}/vars.json"
