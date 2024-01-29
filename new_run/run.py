@@ -130,7 +130,7 @@ if not OUT_DIR.exists():
 
 lammps_util.setup_root_logger(OUT_DIR / "run.log")
 
-INPUT_VARS: Path | None = None
+INPUT_VARS: list[tuple[str, str]] | None = None
 if ARGS.input_vars is not None:
     f_path = Path(ARGS.input_vars)
     with open(f_path, encoding="utf-8", mode="r") as f:
@@ -147,16 +147,9 @@ MPI_CORES: int = ARGS.mpi_cores
 
 N_RUNS: int = ARGS.runs
 IS_MULTIFALL: bool = True
-ENERGY: float = ARGS.energy
-TEMPERATURE: float = ARGS.temperature
-
-LATTICE: float = 5.43
-STEP: float = 1e-3
-SI_TOP: float = 15.3
 
 C60_X: float = 0
 C60_Y: float = 0
-C60_Z_OFFSET: float = 100
 C60_WIDTH: int = 20
 
 IS_ALL_DUMP: bool = True
@@ -169,28 +162,47 @@ if not TMP.exists():
 SI_ATOM_TYPE: int = 1
 C_ATOM_TYPE: int = 2
 
-RUN_TIME: int
-if ARGS.run_time is not None:
-    RUN_TIME = ARGS.run_time
-elif ENERGY < 8_000:
-    RUN_TIME = 10_000
-else:
-    RUN_TIME = int(ENERGY * (5 / 4))
-
 
 def extract_vars_val(key: str) -> str:
     pair = [pair for pair in INPUT_VARS if pair[0] == key][0]
     return pair[1]
 
 
+START_I: int
+ZERO_LVL: float
+TEMPERATURE: float
+RUN_TIME: int
+
+C60_Z_OFFSET: float = 100
+ENERGY: float = ARGS.energy
+
+LATTICE: float = 5.43
+STEP: float = 1e-3
+SI_TOP: float = 15.3
+
 if INPUT_VARS is not None:
     START_I = int(extract_vars_val("run_i"))
     ZERO_LVL = float(extract_vars_val("zero_lvl"))
+    TEMPERATURE = float(extract_vars_val("temperature"))
+    RUN_TIME = int(extract_vars_val("run_time")) + 1000
+
+    C60_Z_OFFSET = float(extract_vars_val("C60_z_offset"))
+    ENERGY = float(extract_vars_val("energy"))
+
+    LATTICE = float(extract_vars_val("lattice"))
+    STEP = float(extract_vars_val("step"))
+    SI_TOP = float(extract_vars_val("Si_top"))
 else:
-    START_I: int = 0
-    ZERO_LVL: float = lammps_util.calc_zero_lvl(
-        INPUT_FILE, SCRIPT_DIR / "in.zero_lvl"
-    )
+    START_I = 0
+    ZERO_LVL = lammps_util.calc_zero_lvl(INPUT_FILE, SCRIPT_DIR / "in.zero_lvl")
+    TEMPERATURE = ARGS.temperature
+
+    if ARGS.run_time is not None:
+        RUN_TIME = ARGS.run_time
+    elif ENERGY < 8_000:
+        RUN_TIME = 10_000
+    else:
+        RUN_TIME = int(ENERGY * (5 / 4))
 
 
 CLUSTERS_TABLE: Path = OUT_DIR / "clusters_table.txt"
@@ -612,6 +624,11 @@ def main() -> None:
         log_file: Path = run_dir / "log.lammps"
         write_file = TMP / "tmp.input.data"
 
+        backup_input_file: Path = run_dir / "input.data"
+        if input_file != backup_input_file:
+            shutil.copy(input_file, backup_input_file)
+        input_file = backup_input_file
+
         vars = [
             ("run_i", str(run_i)),
             ("input_file", str(input_file)),
@@ -637,11 +654,7 @@ def main() -> None:
 
         vars_path: Path = run_dir / "vars.json"
         with open(vars_path, encoding="utf-8", mode="w") as f:
-            json.dump(vars, f)
-
-        backup_input_file: Path = run_dir / "input.data"
-        if input_file != backup_input_file:
-            shutil.copy(input_file, backup_input_file)
+            json.dump(vars, f, indent=2)
 
         if (
             lammps_util.lammps_run(
@@ -654,7 +667,6 @@ def main() -> None:
             != 0
         ):
             continue
-        vars = None
 
         dump_cluster = Dump(dump_cluster_path)
         dump_final = Dump(dump_final_path)
