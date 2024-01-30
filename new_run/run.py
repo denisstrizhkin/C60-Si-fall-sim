@@ -369,9 +369,7 @@ def get_carbon_hist(carbon):
 
     right = int(np.ceil(z_coords.max(initial=float("-inf"))))
     left = int(np.floor(z_coords.min(initial=float("+inf"))))
-    hist, bins = np.histogram(
-        z_coords, bins=(right - left), range=(left, right)
-    )
+    hist, bins = np.histogram(z_coords, bins=(right - left), range=(left, right))
     length = len(hist)
     hist = np.concatenate(
         ((bins[1:] - 0.5).reshape(length, 1), hist.reshape(length, 1)), axis=1
@@ -576,27 +574,23 @@ def main() -> None:
 
         lammps_util.save_table(CLUSTERS_TABLE, clusters_table, mode="a")
         lammps_util.save_table(RIM_TABLE, rim_info, mode="a")
-        lammps_util.save_table(
-            CARBON_DIST, carbon_hist, header=str(run_num), mode="a"
-        )
+        lammps_util.save_table(CARBON_DIST, carbon_hist, header=str(run_num), mode="a")
         lammps_util.save_table(CARBON_TABLE, carbon_info, mode="a")
         # save_table(run_dir / 'surface_table.txt', surface_data, mode='w')
         lammps_util.save_table(SURFACE_TABLE, [[run_num, sigma]], mode="a")
 
         run_i += 1
 
-    clusters_parse(CLUSTERS_TABLE)
-    clusters_parse_sum(CLUSTERS_TABLE)
-    clusters_parse_angle_dist(CLUSTERS_TABLE)
-    carbon_dist_parse(CARBON_DIST)
+    lammps_util.clusters_parse(CLUSTERS_TABLE, N_RUNS)
+    lammps_util.clusters_parse_sum(CLUSTERS_TABLE, N_RUNS)
+    lammps_util.clusters_parse_angle_dist(CLUSTERS_TABLE, N_RUNS)
+    lammps_util.carbon_dist_parse(CARBON_DIST)
 
     lammps_util.create_archive(OUT_DIR)
     print("*** FINISHED COMPLETELY ***")
 
     with open(Path("./runs.log"), encoding="utf-8", mode="a") as f:
-        f.write(
-            f"{OUT_DIR.name} {INPUT_FILE.name} {ENERGY} {TEMPERATURE} {N_RUNS}\n"
-        )
+        f.write(f"{OUT_DIR.name} {INPUT_FILE.name} {ENERGY} {TEMPERATURE} {N_RUNS}\n")
 
 
 if __name__ == "__main__":
