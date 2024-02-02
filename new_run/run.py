@@ -579,6 +579,8 @@ def main() -> None:
         # save_table(run_dir / 'surface_table.txt', surface_data, mode='w')
         lammps_util.save_table(SURFACE_TABLE, [[run_num, sigma]], mode="a")
 
+        dump_final_no_cluster_path.unlink()
+
         run_i += 1
 
     lammps_util.clusters_parse(CLUSTERS_TABLE, N_RUNS)
