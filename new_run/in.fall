@@ -12,7 +12,7 @@ balance 1.0 shift xyz 10 1.0
 variable bottom_fixed_top equal 'zlo + 0.5 * v_lattice'
 variable thermostat_floor_top equal 'v_bottom_fixed_top + v_lattice'
 
-variable C60_z equal 'v_C60_z_offset + v_Si_top'
+variable C60_z equal 'v_C60_z_offset + v_zero_lvl'
 variable C60_vel equal '-sqrt(v_energy * 1000) * 5.174 '
 
 ### regions ###

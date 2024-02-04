@@ -130,10 +130,10 @@ if not OUT_DIR.exists():
 
 lammps_util.setup_root_logger(OUT_DIR / "run.log")
 
-INPUT_VARS: list[tuple[str, str]] | None = None
+INPUT_VARS: dict[str, str] = {}
 if ARGS.input_vars is not None:
     f_path = Path(ARGS.input_vars)
-    with open(f_path, encoding="utf-8", mode="r") as f:
+    with open(f_path, mode="r") as f:
         INPUT_VARS = json.load(f)
 
 INPUT_FILE: Path = Path(ARGS.input_file)
@@ -162,48 +162,38 @@ if not TMP.exists():
 SI_ATOM_TYPE: int = 1
 C_ATOM_TYPE: int = 2
 
+if "run_i" not in INPUT_VARS:
+    INPUT_VARS["run_i"] = str(0)
 
-def extract_vars_val(key: str) -> str:
-    pair = [pair for pair in INPUT_VARS if pair[0] == key][0]
-    return pair[1]
+if "zero_lvl" not in INPUT_VARS:
+    INPUT_VARS["zero_lvl"] = str(
+        lammps_util.calc_zero_lvl(INPUT_FILE, SCRIPT_DIR / "in.zero_lvl")
+    )
 
+if "temperature" not in INPUT_VARS:
+    INPUT_VARS["temperature"] = str(ARGS.temperature)
 
-START_I: int
-ZERO_LVL: float
-TEMPERATURE: float
-RUN_TIME: int
+if "energy" not in INPUT_VARS:
+    INPUT_VARS["energy"] = str(ARGS.energy)
 
-C60_Z_OFFSET: float = 100
-ENERGY: float = ARGS.energy
-
-LATTICE: float = 5.43
-STEP: float = 1e-3
-SI_TOP: float = 15.3
-
-if INPUT_VARS is not None:
-    START_I = int(extract_vars_val("run_i"))
-    ZERO_LVL = float(extract_vars_val("zero_lvl"))
-    TEMPERATURE = float(extract_vars_val("temperature"))
-    RUN_TIME = int(extract_vars_val("run_time")) + 1000
-
-    C60_Z_OFFSET = float(extract_vars_val("C60_z_offset"))
-    ENERGY = float(extract_vars_val("energy"))
-
-    LATTICE = float(extract_vars_val("lattice"))
-    STEP = float(extract_vars_val("step"))
-    SI_TOP = float(extract_vars_val("Si_top"))
-else:
-    START_I = 0
-    ZERO_LVL = lammps_util.calc_zero_lvl(INPUT_FILE, SCRIPT_DIR / "in.zero_lvl")
-    TEMPERATURE = ARGS.temperature
-
+if "run_time" not in INPUT_VARS:
+    energy = float(INPUT_VARS["energy"])
     if ARGS.run_time is not None:
-        RUN_TIME = ARGS.run_time
-    elif ENERGY < 8_000:
-        RUN_TIME = 10_000
+        run_time = ARGS.run_time
+    elif energy < 8_000:
+        run_time = 10_000
     else:
-        RUN_TIME = int(ENERGY * (5 / 4))
+        run_time = int(energy * (5 / 4))
+    INPUT_VARS["run_time"] = str(run_time)
 
+if "C60_z_offset" not in INPUT_VARS:
+    INPUT_VARS["C60_z_offset"] = str(100)
+
+if "step" not in INPUT_VARS:
+    INPUT_VARS["step"] = str(1e-6)
+
+if "lattice" is not INPUT_VARS:
+    INPUT_VARS["lattice"] = str(5.43)
 
 CLUSTERS_TABLE: Path = OUT_DIR / "clusters_table.txt"
 RIM_TABLE: Path = OUT_DIR / "rim_table.txt"
@@ -219,7 +209,7 @@ def write_header(header_str, table_path):
         f.write("# " + header_str + "\n")
 
 
-if START_I == 0:
+if INPUT_VARS["run_i"] == str(0):
     write_header("sim_num N_Si N_C mass Px Py Pz Ek angle", CLUSTERS_TABLE)
     write_header("sim_num N r_mean r_max z_mean z_max", RIM_TABLE)
     write_header("sim_num N r_mean r_max", CARBON_TABLE)
@@ -237,7 +227,7 @@ def extract_ids_var(lmp, name, group):
         return ids[np.nonzero(ids)].astype(int)
 
 
-def get_cluster_dic(cluster_dump: Dump):
+def get_cluster_dic(cluster_dump: Dump, zero_lvl: float):
     clusters = cluster_dump["c_clusters"]
 
     cluster_dic: dict = dict()
@@ -271,7 +261,7 @@ def get_cluster_dic(cluster_dump: Dump):
     keys_to_delete = []
     for key in cluster_dic.keys():
         for cluster in cluster_dic[key]:
-            if cluster.z < (ZERO_LVL + 2.0):
+            if cluster.z < (zero_lvl + 2.0):
                 keys_to_delete.append(key)
                 break
 
@@ -318,7 +308,7 @@ def get_clusters_table(cluster_dic, sim_num):
     return table.reshape((table.shape[0] // 9, 9))
 
 
-def get_rim_info(rim_atoms, fu_x, fu_y, sim_num):
+def get_rim_info(rim_atoms, fu_x, fu_y, sim_num, zero_lvl: float) -> np.ndarray:
     if len(rim_atoms) == 0:
         return np.array([])
 
@@ -339,8 +329,8 @@ def get_rim_info(rim_atoms, fu_x, fu_y, sim_num):
                 len(rim_atoms),
                 r.mean(),
                 r.max(),
-                z.mean() - ZERO_LVL,
-                z.max() - ZERO_LVL,
+                z.mean() - zero_lvl,
+                z.max() - zero_lvl,
             ]
         ]
     )
@@ -361,10 +351,10 @@ def get_carbon(dump_final, carbon_sputtered):
     return carbon
 
 
-def get_carbon_hist(carbon):
+def get_carbon_hist(carbon, zero_lvl: float):
     z_coords = []
     for c in carbon:
-        z_coords.append(np.around(c.z - ZERO_LVL, 1))
+        z_coords.append(np.around(c.z - zero_lvl, 1))
     z_coords = np.array(z_coords)
 
     right = int(np.ceil(z_coords.max(initial=float("-inf"))))
@@ -390,7 +380,7 @@ def get_carbon_info(carbon, fu_x, fu_y, sim_num):
     return np.array([[sim_num, len(carbon), r.mean(), r.max()]])
 
 
-def get_crater_info(dump_crater: Dump, sim_num):
+def get_crater_info(dump_crater: Dump, sim_num: int, zero_lvl: float) -> np.ndarray:
     id = dump_crater["id"]
     z = dump_crater["z"]
     clusters = dump_crater["c_clusters"]
@@ -401,14 +391,14 @@ def get_crater_info(dump_crater: Dump, sim_num):
         if clusters[i] == crater_id:
             atoms.append(Atom(z=z[i], id=id[i]))
 
-    cell_vol = np.median(dump_crater["c_voro_vol[1]"])
+    cell_vol = float(np.median(dump_crater["c_voro_vol[1]"]))
     crater_vol = cell_vol * len(atoms)
 
     surface_count = 0
     z = []
     for atom in atoms:
         z.append(atom.z)
-        if atom.z > -2.4 * 0.707 + ZERO_LVL:
+        if atom.z > -2.4 * 0.707 + zero_lvl:
             surface_count += 1
     z = np.array(z)
 
@@ -422,18 +412,25 @@ def get_crater_info(dump_crater: Dump, sim_num):
                 len(atoms),
                 crater_vol,
                 surface_area,
-                z.mean() - ZERO_LVL,
-                z.min() - ZERO_LVL,
+                z.mean() - zero_lvl,
+                z.min() - zero_lvl,
             ]
         ]
     )
 
 
 def main() -> None:
-    global INPUT_VARS
+    lattice = float(INPUT_VARS["lattice"])
+    zero_lvl = float(INPUT_VARS["zero_lvl"])
+    c60_z_offset = float(INPUT_VARS["C60_z_offset"])
 
-    run_i: int = START_I
+    energy = float(INPUT_VARS["energy"])
+    run_time = float(INPUT_VARS["run_time"])
+    step = float(INPUT_VARS["step"])
+    temperature = float(INPUT_VARS["temperature"])
+
     input_file: Path = INPUT_FILE
+    run_i = int(INPUT_VARS["run_i"])
 
     while run_i < N_RUNS:
         run_num = run_i + 1
@@ -441,16 +438,18 @@ def main() -> None:
         if not run_dir.exists():
             run_dir.mkdir()
 
-        def rnd_coord(coord):
-            return coord + (np.random.rand() * 2 - 1) * LATTICE * C60_WIDTH
+        def rnd_coord(coord: float) -> float:
+            return coord + (np.random.rand() * 2 - 1) * lattice * C60_WIDTH
 
-        if INPUT_VARS is None:
-            fu_x = rnd_coord(C60_X)
-            fu_y = rnd_coord(C60_Y)
+        if "C60_x" in INPUT_VARS and run_i == int(INPUT_VARS["run_i"]):
+            fu_x = float(INPUT_VARS["C60_x"])
         else:
-            fu_x = float(extract_vars_val("C60_x"))
-            fu_y = float(extract_vars_val("C60_y"))
-            INPUT_VARS = None
+            fu_x = rnd_coord(C60_X)
+
+        if "C60_y" in INPUT_VARS and run_i == int(INPUT_VARS["run_i"]):
+            fu_y = float(INPUT_VARS["C60_y"])
+        else:
+            fu_y = rnd_coord(C60_Y)
 
         vacs_restart_file: Path = TMP / "vacs.restart"
 
@@ -468,28 +467,28 @@ def main() -> None:
             shutil.copy(input_file, backup_input_file)
         input_file = backup_input_file
 
-        vars = [
-            ("run_i", str(run_i)),
-            ("input_file", str(input_file)),
-            ("mol_file", str(MOL_FILE)),
-            ("elstop_table", str(ELSTOP_TABLE)),
-            ("lattice", str(LATTICE)),
-            ("Si_top", str(ZERO_LVL + 0.5)),
-            ("C60_z_offset", str(C60_Z_OFFSET)),
-            ("C60_y", str(fu_y)),
-            ("C60_x", str(fu_x)),
-            ("step", str(STEP)),
-            ("temperature", str(TEMPERATURE)),
-            ("energy", str(ENERGY)),
-            ("zero_lvl", str(ZERO_LVL)),
-            ("vacs_restart_file", str(vacs_restart_file)),
-            ("run_time", str(RUN_TIME - 1000)),
-            ("dump_cluster", str(dump_cluster_path)),
-            ("dump_final", str(dump_final_path)),
-            ("dump_during", str(dump_during_path)),
-            ("dump_crater_id", str(dump_crater_id_path)),
-            ("write_file", str(write_file)),
-        ]
+        vars = {
+            "run_i": str(run_i),
+            "input_file": str(input_file),
+            "mol_file": str(MOL_FILE),
+            "elstop_table": str(ELSTOP_TABLE),
+            "lattice": str(lattice),
+            "Si_top": str(zero_lvl + 0.5),
+            "C60_z_offset": str(c60_z_offset),
+            "C60_y": str(0),
+            "C60_x": str(0),
+            "step": str(step),
+            "temperature": str(temperature),
+            "energy": str(energy),
+            "zero_lvl": str(zero_lvl),
+            "vacs_restart_file": str(vacs_restart_file),
+            "run_time": str(run_time),
+            "dump_cluster": str(dump_cluster_path),
+            "dump_final": str(dump_final_path),
+            "dump_during": str(dump_during_path),
+            "dump_crater_id": str(dump_crater_id_path),
+            "write_file": str(write_file),
+        }
 
         vars_path: Path = run_dir / "vars.json"
         with open(vars_path, encoding="utf-8", mode="w") as f:
@@ -510,7 +509,7 @@ def main() -> None:
         dump_cluster = Dump(dump_cluster_path)
         dump_final = Dump(dump_final_path)
 
-        cluster_dic_atoms, rim_atoms = get_cluster_dic(dump_cluster)
+        cluster_dic_atoms, rim_atoms = get_cluster_dic(dump_cluster, zero_lvl)
 
         cluster_dic = dict()
         carbon_sputtered = set()
@@ -522,10 +521,10 @@ def main() -> None:
             cluster_dic[key] = Cluster(cluster_dic_atoms[key], SI_ATOM_TYPE)
 
         clusters_table = get_clusters_table(cluster_dic, run_num).astype(float)
-        rim_info = get_rim_info(rim_atoms, fu_x, fu_y, run_num)
+        rim_info = get_rim_info(rim_atoms, fu_x, fu_y, run_num, zero_lvl)
 
         carbon = get_carbon(dump_final, carbon_sputtered)
-        carbon_hist = get_carbon_hist(carbon)
+        carbon_hist = get_carbon_hist(carbon, zero_lvl)
         carbon_info = get_carbon_info(carbon, fu_x, fu_y, run_num)
 
         ids_to_delete = []
@@ -548,7 +547,7 @@ def main() -> None:
 
         dump_final_no_cluster = Dump(dump_final_no_cluster_path)
         sigma = lammps_util.calc_surface(
-            dump_final_no_cluster, run_dir, LATTICE, ZERO_LVL, C60_WIDTH
+            dump_final_no_cluster, run_dir, lattice, zero_lvl, C60_WIDTH
         )
 
         dump_cluster_id = Dump(dump_crater_id_path)
@@ -558,18 +557,18 @@ def main() -> None:
             if (
                 lammps_util.lammps_run(
                     SCRIPT_DIR / "in.crater",
-                    [
-                        ("input_file", str(input_file)),
-                        ("dump_crater", str(dump_crater_path)),
-                        ("vac_ids", vac_ids),
-                    ],
+                    {
+                        "input_file": str(input_file),
+                        "dump_crater": str(dump_crater_path),
+                        "vac_ids": vac_ids,
+                    },
                 )
                 != 0
             ):
                 continue
 
             dump_crater = Dump(dump_crater_path)
-            crater_info = get_crater_info(dump_crater, run_num)
+            crater_info = get_crater_info(dump_crater, run_num, zero_lvl)
             lammps_util.save_table(CRATER_TABLE, crater_info, mode="a")
 
         lammps_util.save_table(CLUSTERS_TABLE, clusters_table, mode="a")
@@ -592,7 +591,7 @@ def main() -> None:
     print("*** FINISHED COMPLETELY ***")
 
     with open(Path("./runs.log"), encoding="utf-8", mode="a") as f:
-        f.write(f"{OUT_DIR.name} {INPUT_FILE.name} {ENERGY} {TEMPERATURE} {N_RUNS}\n")
+        f.write(f"{OUT_DIR.name} {INPUT_FILE.name} {energy} {temperature} {N_RUNS}\n")
 
 
 if __name__ == "__main__":
