@@ -116,7 +116,7 @@ unfix dt
 group dt_reset delete
 
 thermo 20
-run ${run_time}
+run $(v_run_time - 1000)
  
 group clusters variable is_sputtered
 compute clusters all cluster/atom 3

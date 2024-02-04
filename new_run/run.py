@@ -190,9 +190,9 @@ if "C60_z_offset" not in INPUT_VARS:
     INPUT_VARS["C60_z_offset"] = str(100)
 
 if "step" not in INPUT_VARS:
-    INPUT_VARS["step"] = str(1e-6)
+    INPUT_VARS["step"] = str(1e-3)
 
-if "lattice" is not INPUT_VARS:
+if "lattice" not in INPUT_VARS:
     INPUT_VARS["lattice"] = str(5.43)
 
 CLUSTERS_TABLE: Path = OUT_DIR / "clusters_table.txt"
@@ -425,7 +425,7 @@ def main() -> None:
     c60_z_offset = float(INPUT_VARS["C60_z_offset"])
 
     energy = float(INPUT_VARS["energy"])
-    run_time = float(INPUT_VARS["run_time"])
+    run_time = int(INPUT_VARS["run_time"])
     step = float(INPUT_VARS["step"])
     temperature = float(INPUT_VARS["temperature"])
 
@@ -473,7 +473,6 @@ def main() -> None:
             "mol_file": str(MOL_FILE),
             "elstop_table": str(ELSTOP_TABLE),
             "lattice": str(lattice),
-            "Si_top": str(zero_lvl + 0.5),
             "C60_z_offset": str(c60_z_offset),
             "C60_y": str(0),
             "C60_x": str(0),
