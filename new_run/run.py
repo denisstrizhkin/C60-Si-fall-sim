@@ -6,6 +6,7 @@ import argparse
 import tempfile
 import json
 import shutil
+import operator
 
 import lammps_util
 from lammps_util import Dump, Atom, Cluster
@@ -166,9 +167,10 @@ if "run_i" not in INPUT_VARS:
     INPUT_VARS["run_i"] = str(0)
 
 if "zero_lvl" not in INPUT_VARS:
-    INPUT_VARS["zero_lvl"] = str(
-        lammps_util.calc_zero_lvl(INPUT_FILE, SCRIPT_DIR / "in.zero_lvl")
-    )
+    # INPUT_VARS["zero_lvl"] = str(
+    #     lammps_util.calc_zero_lvl(INPUT_FILE, SCRIPT_DIR / "in.zero_lvl")
+    # )
+    INPUT_VARS["zero_lvl"] = str(82.7813)
 
 if "temperature" not in INPUT_VARS:
     INPUT_VARS["temperature"] = str(ARGS.temperature)
@@ -187,7 +189,7 @@ if "run_time" not in INPUT_VARS:
     INPUT_VARS["run_time"] = str(run_time)
 
 if "C60_z_offset" not in INPUT_VARS:
-    INPUT_VARS["C60_z_offset"] = str(100)
+    INPUT_VARS["C60_z_offset"] = str(150)
 
 if "step" not in INPUT_VARS:
     INPUT_VARS["step"] = str(1e-3)
@@ -227,12 +229,21 @@ def extract_ids_var(lmp, name, group):
         return ids[np.nonzero(ids)].astype(int)
 
 
-def get_cluster_dic(cluster_dump: Dump, zero_lvl: float):
-    clusters = cluster_dump["c_clusters"]
+def get_cluster_atoms_dict(
+    cluster_dump: Dump, zero_lvl: float
+) -> tuple[dict[int, list[Atom]], list[Atom]]:
+    cluster_id = cluster_dump["c_clusters"]
 
-    cluster_dic: dict = dict()
-    for cluster_id in set(clusters):
-        cluster_dic[cluster_id] = []
+    unique, counts = np.unique(cluster_id, return_counts=True)
+    cluster_count = dict(zip(unique, counts))
+
+    id_to_delete_1 = max(cluster_count.items(), key=operator.itemgetter(1))[0]
+    cluster_count.pop(id_to_delete_1)
+    id_to_delete_2 = max(cluster_count.items(), key=operator.itemgetter(1))[0]
+
+    cluster_dict: dict[int, list[Atom]] = dict()
+    for cid in np.unique(cluster_id):
+        cluster_dict[cid] = []
 
     x = cluster_dump["x"]
     y = cluster_dump["y"]
@@ -245,7 +256,7 @@ def get_cluster_dic(cluster_dump: Dump, zero_lvl: float):
     id = cluster_dump["id"]
 
     for i in range(0, len(z)):
-        cluster = Atom(
+        atom = Atom(
             x=x[i],
             y=y[i],
             z=z[i],
@@ -256,20 +267,27 @@ def get_cluster_dic(cluster_dump: Dump, zero_lvl: float):
             type=type[i],
             id=id[i],
         )
-        cluster_dic[clusters[i]].append(cluster)
+        cluster_dict[cluster_id[i]].append(atom)
 
-    keys_to_delete = []
-    for key in cluster_dic.keys():
-        for cluster in cluster_dic[key]:
-            if cluster.z < (zero_lvl + 2.0):
-                keys_to_delete.append(key)
-                break
+    rim_atoms = cluster_dict.pop(id_to_delete_1)
+    cluster_dict.pop(id_to_delete_2)
 
-    rim_atoms = []
-    for key in keys_to_delete:
-        rim_atoms += cluster_dic.pop(key)
+    return cluster_dict, rim_atoms
 
-    return cluster_dic, rim_atoms
+
+def get_cluster_dict(
+    cluster_atoms_dict: dict[int, list[Atom]]
+) -> tuple[dict[int, Cluster], set[int]]:
+    cluster_dict = dict()
+    carbon_sputtered = set()
+
+    for cid, atoms in cluster_atoms_dict.items():
+        for atom in atoms:
+            if atom.type == C_ATOM_TYPE:
+                carbon_sputtered.add(atom.id)
+        cluster_dict[cid] = Cluster(atoms, SI_ATOM_TYPE)
+
+    return cluster_dict, carbon_sputtered
 
 
 def get_vacancies_group_cmd(lmp):
@@ -308,54 +326,50 @@ def get_clusters_table(cluster_dic, sim_num):
     return table.reshape((table.shape[0] // 9, 9))
 
 
-def get_rim_info(rim_atoms, fu_x, fu_y, sim_num, zero_lvl: float) -> np.ndarray:
+def get_rim_info(
+    rim_atoms: list[Atom], fu_x: float, fu_y: float, sim_num: int, zero_lvl: float
+) -> np.ndarray:
     if len(rim_atoms) == 0:
         return np.array([])
 
-    r = []
-    z = []
+    def radius(atom: Atom) -> float:
+        dx = atom.x - fu_x
+        dy = atom.y - fu_y
+        return np.sqrt(dx**2 + dy**2)
 
-    for atom in rim_atoms:
-        r.append(np.sqrt((atom.x - fu_x) ** 2 + (atom.y - fu_y) ** 2))
-        z.append(atom.z)
-
-    r = np.array(r)
-    z = np.array(z)
+    r = np.fromiter(map(radius, rim_atoms), float)
+    z = np.fromiter(map(operator.attrgetter("z"), rim_atoms), float)
 
     return np.array(
         [
-            [
-                sim_num,
-                len(rim_atoms),
-                r.mean(),
-                r.max(),
-                z.mean() - zero_lvl,
-                z.max() - zero_lvl,
-            ]
+            sim_num,
+            len(rim_atoms),
+            r.mean(),
+            r.max(),
+            z.mean() - zero_lvl,
+            z.max() - zero_lvl,
         ]
     )
 
 
-def get_carbon(dump_final, carbon_sputtered):
+def get_carbon(dump_final: Dump, carbon_sputtered: set[int]) -> list[Atom]:
     x = dump_final["x"]
     y = dump_final["y"]
     z = dump_final["z"]
     id = dump_final["id"]
     type = dump_final["type"]
 
-    carbon = []
-    for i in range(0, len(x)):
-        if id[i] not in carbon_sputtered and type[i] == C_ATOM_TYPE:
-            carbon.append(Atom(x=x[i], y=y[i], z=z[i], id=id[i]))
+    carbon: list[Atom] = []
+    for i, atom_id in enumerate(id):
+        if atom_id not in carbon_sputtered and type[i] == C_ATOM_TYPE:
+            carbon.append(Atom(x=x[i], y=y[i], z=z[i], id=atom_id))
 
     return carbon
 
 
-def get_carbon_hist(carbon, zero_lvl: float):
-    z_coords = []
-    for c in carbon:
-        z_coords.append(np.around(c.z - zero_lvl, 1))
-    z_coords = np.array(z_coords)
+def get_carbon_hist(carbon: list[Atom], zero_lvl: float) -> np.ndarray:
+    z_coords = np.fromiter(map(operator.attrgetter("z"), carbon), float)
+    z_coords = np.around(z_coords - zero_lvl, 1)
 
     right = int(np.ceil(z_coords.max(initial=float("-inf"))))
     left = int(np.floor(z_coords.min(initial=float("+inf"))))
@@ -449,7 +463,13 @@ def main() -> None:
         if "C60_y" in INPUT_VARS and run_i == int(INPUT_VARS["run_i"]):
             fu_y = float(INPUT_VARS["C60_y"])
         else:
-            fu_y = rnd_coord(C60_Y)
+            # fu_y = rnd_coord(C60_Y)
+            # x0: 21.081125205358717
+            # x: 15.357599712103825
+            low = -21.0811 - lattice * 20
+            high = -14.5944
+            delta = high - low
+            fu_y = (np.random.rand() * delta) + low + lattice * 10
 
         vacs_restart_file: Path = TMP / "vacs.restart"
 
@@ -474,8 +494,8 @@ def main() -> None:
             "elstop_table": str(ELSTOP_TABLE),
             "lattice": str(lattice),
             "C60_z_offset": str(c60_z_offset),
-            "C60_y": str(0),
-            "C60_x": str(0),
+            "C60_y": str(fu_y),
+            "C60_x": str(fu_x),
             "step": str(step),
             "temperature": str(temperature),
             "energy": str(energy),
@@ -508,30 +528,20 @@ def main() -> None:
         dump_cluster = Dump(dump_cluster_path)
         dump_final = Dump(dump_final_path)
 
-        cluster_dic_atoms, rim_atoms = get_cluster_dic(dump_cluster, zero_lvl)
+        cluster_atoms_dict, rim_atoms = get_cluster_atoms_dict(dump_cluster, zero_lvl)
+        cluster_dict, carbon_sputtered = get_cluster_dict(cluster_atoms_dict)
 
-        cluster_dic = dict()
-        carbon_sputtered = set()
-        for key in cluster_dic_atoms.keys():
-            atoms = cluster_dic_atoms[key]
-            for atom in atoms:
-                if atom.type == C_ATOM_TYPE:
-                    carbon_sputtered.add(atom.id)
-            cluster_dic[key] = Cluster(cluster_dic_atoms[key], SI_ATOM_TYPE)
-
-        clusters_table = get_clusters_table(cluster_dic, run_num).astype(float)
+        clusters_table = get_clusters_table(cluster_dict, run_num).astype(float)
         rim_info = get_rim_info(rim_atoms, fu_x, fu_y, run_num, zero_lvl)
 
         carbon = get_carbon(dump_final, carbon_sputtered)
         carbon_hist = get_carbon_hist(carbon, zero_lvl)
         carbon_info = get_carbon_info(carbon, fu_x, fu_y, run_num)
 
-        ids_to_delete = []
-        if len(cluster_dic.keys()) != 0:
-            for key in cluster_dic_atoms.keys():
-                for atom in cluster_dic_atoms[key]:
-                    ids_to_delete.append(atom.id)
-            ids_to_delete = list(map(int, ids_to_delete))
+        ids_to_delete: list[int] = []
+        for atoms in cluster_atoms_dict.values():
+            for atom in atoms:
+                ids_to_delete.append(atom.id)
 
         dump_final_no_cluster_path = run_dir / "dump.final_no_cluster"
         lammps_util.dump_delete_atoms(
