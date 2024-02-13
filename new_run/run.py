@@ -237,9 +237,8 @@ def get_cluster_atoms_dict(
     unique, counts = np.unique(cluster_id, return_counts=True)
     cluster_count = dict(zip(unique, counts))
 
-    id_to_delete_1 = max(cluster_count.items(), key=operator.itemgetter(1))[0]
-    cluster_count.pop(id_to_delete_1)
-    id_to_delete_2 = max(cluster_count.items(), key=operator.itemgetter(1))[0]
+    cluster_to_delete = dict(filter(lambda x: x[1] > 1000, cluster_count.items()))
+    rim_id = max(cluster_to_delete.items(), key=operator.itemgetter(1))[0]
 
     cluster_dict: dict[int, list[Atom]] = dict()
     for cid in np.unique(cluster_id):
@@ -255,7 +254,7 @@ def get_cluster_atoms_dict(
     type = cluster_dump["type"]
     id = cluster_dump["id"]
 
-    for i in range(0, len(z)):
+    for i, cid in enumerate(cluster_id):
         atom = Atom(
             x=x[i],
             y=y[i],
@@ -267,10 +266,11 @@ def get_cluster_atoms_dict(
             type=type[i],
             id=id[i],
         )
-        cluster_dict[cluster_id[i]].append(atom)
+        cluster_dict[cid].append(atom)
 
-    rim_atoms = cluster_dict.pop(id_to_delete_1)
-    cluster_dict.pop(id_to_delete_2)
+    rim_atoms = cluster_dict[rim_id]
+    for cid in cluster_to_delete.keys():
+        cluster_dict.pop(cid)
 
     return cluster_dict, rim_atoms
 
