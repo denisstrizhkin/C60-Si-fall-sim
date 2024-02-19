@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import logging
 import numpy as np
 from pathlib import Path
 import argparse
@@ -7,6 +8,7 @@ import tempfile
 import json
 import shutil
 import operator
+from itertools import chain
 
 import lammps_util
 from lammps_util import Dump, Atom, Cluster
@@ -147,7 +149,7 @@ OMP_THREADS: int = ARGS.omp_threads
 MPI_CORES: int = ARGS.mpi_cores
 
 N_RUNS: int = ARGS.runs
-IS_MULTIFALL: bool = True
+IS_MULTIFALL: bool = False
 
 C60_X: float = 0
 C60_Y: float = 0
@@ -198,6 +200,7 @@ if "lattice" not in INPUT_VARS:
     INPUT_VARS["lattice"] = str(5.43)
 
 CLUSTERS_TABLE: Path = OUT_DIR / "clusters_table.txt"
+SPUTTER_COUNT_TABLE = OUT_DIR / "sputter_count_table.txt"
 RIM_TABLE: Path = OUT_DIR / "rim_table.txt"
 CARBON_TABLE: Path = OUT_DIR / "carbon_table.txt"
 CRATER_TABLE: Path = OUT_DIR / "crater_table.txt"
@@ -218,6 +221,7 @@ if INPUT_VARS["run_i"] == str(0):
     write_header("sim_num N V S z_mean z_min", CRATER_TABLE)
     write_header("z count", CARBON_DIST)
     write_header("sim_num sigma", SURFACE_TABLE)
+    write_header("sim_num N_Si N_C N_Sum", SPUTTER_COUNT_TABLE)
     # write_header("sim_num id Si C Sum", COORD_NUM_TABLE)
 
 
@@ -267,9 +271,11 @@ def get_cluster_atoms_dict(
             id=id[i],
         )
         cluster_dict[cid].append(atom)
+        # logging.info(f"found sputtered atom with id {atom.id}")
 
     rim_atoms = cluster_dict[rim_id]
     for cid in cluster_to_delete.keys():
+        logging.info(f"deleteing cluster {cid} with {len(cluster_dict[cid])} atoms")
         cluster_dict.pop(cid)
 
     return cluster_dict, rim_atoms
@@ -464,20 +470,19 @@ def main() -> None:
             fu_y = float(INPUT_VARS["C60_y"])
         else:
             # fu_y = rnd_coord(C60_Y)
-            # x0: 21.081125205358717
-            # x: 15.357599712103825
-            low = -21.0811 - lattice * 20
-            high = -14.5944
-            delta = high - low
-            fu_y = (np.random.rand() * delta) + low + lattice * 10
+            xlo = 59.56073644453781
+            xhi = 48.49525382424502
+            delta = xhi - xlo
+            fu_y = (np.random.rand() * delta) + xlo
 
         vacs_restart_file: Path = TMP / "vacs.restart"
 
-        dump_cluster_path: Path = run_dir / "dump.cluster"
-        dump_final_path: Path = run_dir / "dump.final"
-        dump_during_path: Path = run_dir / "dump.during"
-        dump_crater_path: Path = run_dir / "dump.crater"
-        dump_crater_id_path: Path = run_dir / "dump.crater_id"
+        dump_cluster_path = run_dir / "dump.cluster"
+        dump_cluster_nb_path = run_dir / "dump.cluster_nb"
+        dump_final_path = run_dir / "dump.final"
+        dump_during_path = run_dir / "dump.during"
+        dump_crater_path = run_dir / "dump.crater"
+        dump_crater_id_path = run_dir / "dump.crater_id"
 
         log_file: Path = run_dir / "log.lammps"
         write_file = TMP / "tmp.input.data"
@@ -503,6 +508,7 @@ def main() -> None:
             "vacs_restart_file": str(vacs_restart_file),
             "run_time": str(run_time),
             "dump_cluster": str(dump_cluster_path),
+            "dump_cluster_nb": str(dump_cluster_nb_path),
             "dump_final": str(dump_final_path),
             "dump_during": str(dump_during_path),
             "dump_crater_id": str(dump_crater_id_path),
@@ -526,9 +532,39 @@ def main() -> None:
             continue
 
         dump_cluster = Dump(dump_cluster_path)
+        dump_cluster_nb = Dump(dump_cluster_nb_path)
         dump_final = Dump(dump_final_path)
 
         cluster_atoms_dict, rim_atoms = get_cluster_atoms_dict(dump_cluster, zero_lvl)
+        cluster_atoms_dict_nb, _ = get_cluster_atoms_dict(dump_cluster_nb, zero_lvl)
+
+        def count_sputtered(
+            cad: dict[int, list[Atom]], cad_nb: dict[int, list[Atom]]
+        ) -> tuple[int, int, int]:
+            sputtered_ids = set(map(lambda a: a.id, chain.from_iterable(cad.values())))
+            sputtered_ids_nb = set(
+                map(lambda a: a.id, chain.from_iterable(cad_nb.values()))
+            )
+            sputtered_ids_both = sputtered_ids.intersection(sputtered_ids_nb)
+            sputtered_ids_inside_block = sputtered_ids_nb.difference(sputtered_ids_both)
+
+            logging.info(sputtered_ids)
+            logging.info(sputtered_ids_nb)
+
+            sputtered = list(chain.from_iterable(cad.values()))
+            sputtered += [
+                atom
+                for atom in chain.from_iterable(cad_nb.values())
+                if atom.id in sputtered_ids_inside_block
+            ]
+
+            cnt_si = sum(map(lambda a: a.type == SI_ATOM_TYPE, sputtered))
+            cnt_c = sum(map(lambda a: a.type == C_ATOM_TYPE, sputtered))
+
+            return cnt_si, cnt_c, cnt_si + cnt_c
+
+        cnt_sputtered = count_sputtered(cluster_atoms_dict, cluster_atoms_dict_nb)
+
         cluster_dict, carbon_sputtered = get_cluster_dict(cluster_atoms_dict)
 
         clusters_table = get_clusters_table(cluster_dict, run_num).astype(float)
@@ -586,8 +622,11 @@ def main() -> None:
         lammps_util.save_table(CARBON_TABLE, carbon_info, mode="a")
         # save_table(run_dir / 'surface_table.txt', surface_data, mode='w')
         lammps_util.save_table(SURFACE_TABLE, [[run_num, sigma]], mode="a")
+        lammps_util.save_table(
+            SPUTTER_COUNT_TABLE, [[run_num, *cnt_sputtered]], mode="a"
+        )
 
-        dump_final_no_cluster_path.unlink()
+        # dump_final_no_cluster_path.unlink()
 
         run_i += 1
 
