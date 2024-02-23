@@ -1,0 +1,35 @@
+package gpu 0
+suffix gpu
+
+units metal
+dimension 3
+boundary p p m
+atom_style atomic
+
+read_data graphene.dat
+
+variable temp equal "1e-6"
+
+pair_style tersoff/zbl
+pair_coeff * * SiC.tersoff.zbl C
+neigh_modify every 1 delay 0 check no
+
+group C type 1
+
+minimize 1e-16 1e-16 10000 10000
+
+reset_timestep 0
+timestep 1e-3
+thermo 1
+thermo_style custom step pe ke etotal temp dt time
+
+velocity C create $(v_temp) 4928459 dist gaussian
+
+# fix nve C nve
+fix nvt C nvt temp $(v_temp) $(v_temp) 100.0
+
+dump during all custom 25 dump.during id type x y z
+
+run 10000
+
+write_data graphene.data
