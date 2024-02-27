@@ -115,6 +115,14 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--graphene-file",
+        action="store",
+        required=False,
+        type=str,
+        help="Set graphene data file.",
+    )
+
+    parser.add_argument(
         "--script-dir",
         action="store",
         required=True,
@@ -140,6 +148,8 @@ if ARGS.input_vars is not None:
         INPUT_VARS = json.load(f)
 
 INPUT_FILE: Path = Path(ARGS.input_file)
+# GRAPHENE_FILE: Path = Path(ARGS.graphene_file)
+GRAPHENE_FILE = None
 MOL_FILE: Path = Path(ARGS.mol_file)
 ELSTOP_TABLE: Path = Path(ARGS.estop_table)
 
@@ -497,6 +507,7 @@ def main() -> None:
             "input_file": str(input_file),
             "mol_file": str(MOL_FILE),
             "elstop_table": str(ELSTOP_TABLE),
+            "graphene_data": str(GRAPHENE_FILE),
             "lattice": str(lattice),
             "C60_z_offset": str(c60_z_offset),
             "C60_y": str(fu_y),
@@ -635,7 +646,6 @@ def main() -> None:
     lammps_util.clusters_parse_angle_dist(CLUSTERS_TABLE, N_RUNS)
     lammps_util.carbon_dist_parse(CARBON_DIST)
 
-    lammps_util.create_archive(OUT_DIR)
     print("*** FINISHED COMPLETELY ***")
 
     with open(Path("./runs.log"), encoding="utf-8", mode="a") as f:
