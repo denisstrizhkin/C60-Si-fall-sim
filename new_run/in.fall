@@ -15,10 +15,11 @@ variable thermostat_floor_top equal 'v_bottom_fixed_top + v_lattice'
 variable C60_z equal 'v_C60_z_offset + v_zero_lvl'
 variable C60_vel equal '-sqrt(v_energy * 1000) * 5.174 '
 
-variable cos_8 equal '0.9902680687415704'
-variable cos_82 equal '0.13917310096006547'
-variable C60_vel_z equal 'v_C60_vel * v_cos_8'
-variable C60_vel_x equal '-v_C60_vel * v_cos_82'
+### variables block ###
+variable cos_1 equal '0.9902680687415704'
+variable cos_2 equal '0.13917310096006547'
+variable C60_vel_z equal 'v_C60_vel * v_cos_1'
+variable C60_vel_x equal '-v_C60_vel * v_cos_2'
 variable block_zlo equal 'v_zero_lvl + 5.9 * v_lattice'
 variable block_zhi equal 'v_block_zlo + 15.2 * v_lattice'
 
@@ -27,12 +28,13 @@ lattice diamond ${lattice} orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
 
 region nve1 block EDGE EDGE EDGE EDGE EDGE ${bottom_fixed_top} side out units box
 region nve2 block EDGE EDGE EDGE $(ylo + v_lattice * 1) $(v_zero_lvl + v_lattice) $(v_block_zhi + v_lattice) side out units box
-region nve intersect 2 nve1 nve2
+region nve3 block EDGE EDGE EDGE $(yhi - v_lattice * 1) $(v_block_zlo) $(v_block_zhi) side out units box
+region nve intersect 3 nve1 nve2 nve3
 
 region block block EDGE EDGE EDGE EDGE $(v_block_zlo) $(v_block_zhi) units box
 
 region thermostat1 block EDGE EDGE EDGE EDGE ${bottom_fixed_top} ${thermostat_floor_top} units box
-region thermostat2 block EDGE EDGE $(19 * v_lattice) EDGE $(v_block_zlo) $(v_block_zhi) units box
+region thermostat2 block EDGE EDGE $(18 * v_lattice) EDGE $(v_block_zlo) $(v_block_zhi) units box
 region thermostat union 2 thermostat1 thermostat2
 
 region dt_reset block EDGE EDGE EDGE EDGE $(v_zero_lvl - 50) $(v_zero_lvl + 15) units box
@@ -59,9 +61,16 @@ neigh_modify one 4000
 # neighbor    3.0 bin
 
 
-### C60 molecule ###
+### graphene ###
+# read_data ${graphene_data} add append offset 1 0 0 0 0 shift -100 -100 $(v_zero_lvl + 3) group graphene
+
+
+### displace atoms ###
 # displace_atoms all move ${C60_x} ${C60_y} 0 units box
 displace_atoms all move ${C60_x} 0 0 units box
+
+
+### C60 molecule ###
 molecule C60 ${mol_file}
 # create_atoms 1 single 0 0 ${C60_z} mol C60 1 units box
 create_atoms 1 single 0 ${C60_y} ${C60_z} mol C60 1 units box
