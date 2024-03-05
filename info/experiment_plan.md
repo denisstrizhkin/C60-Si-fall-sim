@@ -33,10 +33,10 @@ ________________________________________________________________________________
 
 **Схема областей по мере эксперимента:**
 1. Чистый кремний:
-  
+  ![image](https://github.com/denisstrizhkin/C60-Si-fall-sim/assets/57823199/37e5e6c3-d170-4bf5-bdda-b734546e0a83)
 2. Облучение ионами PF4 и аморфизация слоя:
-   
+   ![image](https://github.com/denisstrizhkin/C60-Si-fall-sim/assets/57823199/7c2693bb-e844-4964-8857-204a7f4c9ad7)
 3. Облучение ионами С_60 и распыление поверхности:
-   
+   ![image](https://github.com/denisstrizhkin/C60-Si-fall-sim/assets/57823199/322a5de0-9c6b-4111-b33b-db561f7a1c27)
 4. Итоговый образец:
-   
+   ![image](https://github.com/denisstrizhkin/C60-Si-fall-sim/assets/57823199/2eaf119c-18a8-44b6-9106-e75968bc8135)
