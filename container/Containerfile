@@ -22,9 +22,7 @@ RUN echo 'dev-python/pillow webp' >> /etc/portage/package.use \
   && echo 'virtual/imagemagick-tools tiff jpeg' >> /etc/portage/package.use \
   && echo 'media-gfx/imagemagick tiff jpeg' >> /etc/portage/package.use
 
-RUN emerge -j 5 -g numpy matplotlib virtualenv
-
-RUN emerge -j 5 -g black mypy python-lsp-server
+RUN emerge -j 5 -g numpy matplotlib virtualenv mpi4py
 
 RUN emerge -j 5 -gu sudo app-crypt/gnupg app-crypt/pinentry bash bash-completion dev-vcs/git curl sys-devel/bc lsof
 

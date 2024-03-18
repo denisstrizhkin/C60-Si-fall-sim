@@ -1,4 +1,4 @@
 #!/bin/sh
 
 distrobox rm -f lammps
-distrobox create --nvidia --name lammps -i lammps
+distrobox create --nvidia --name lammps --home "${HOME}/.local/lammps" -i lammps
