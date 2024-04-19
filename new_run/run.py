@@ -243,54 +243,6 @@ def extract_ids_var(lmp, name, group):
         return ids[np.nonzero(ids)].astype(int)
 
 
-def get_cluster_atoms_dict(
-    cluster_dump: Dump, zero_lvl: float
-) -> tuple[dict[int, list[Atom]], list[Atom]]:
-    cluster_id = cluster_dump["c_clusters"]
-
-    unique, counts = np.unique(cluster_id, return_counts=True)
-    cluster_count = dict(zip(unique, counts))
-
-    cluster_to_delete = dict(filter(lambda x: x[1] > 1000, cluster_count.items()))
-    rim_id = max(cluster_to_delete.items(), key=operator.itemgetter(1))[0]
-
-    cluster_dict: dict[int, list[Atom]] = dict()
-    for cid in np.unique(cluster_id):
-        cluster_dict[cid] = []
-
-    x = cluster_dump["x"]
-    y = cluster_dump["y"]
-    z = cluster_dump["z"]
-    vx = cluster_dump["vx"]
-    vy = cluster_dump["vy"]
-    vz = cluster_dump["vz"]
-    mass = cluster_dump["c_mass"]
-    type = cluster_dump["type"]
-    id = cluster_dump["id"]
-
-    for i, cid in enumerate(cluster_id):
-        atom = Atom(
-            x=x[i],
-            y=y[i],
-            z=z[i],
-            vx=vx[i],
-            vy=vy[i],
-            vz=vz[i],
-            mass=mass[i],
-            type=type[i],
-            id=id[i],
-        )
-        cluster_dict[cid].append(atom)
-        # logging.info(f"found sputtered atom with id {atom.id}")
-
-    rim_atoms = cluster_dict[rim_id]
-    for cid in cluster_to_delete.keys():
-        logging.info(f"deleteing cluster {cid} with {len(cluster_dict[cid])} atoms")
-        cluster_dict.pop(cid)
-
-    return cluster_dict, rim_atoms
-
-
 def get_cluster_dict(
     cluster_atoms_dict: dict[int, list[Atom]]
 ) -> tuple[dict[int, Cluster], set[int]]:
@@ -519,11 +471,11 @@ def main() -> None:
             "vacs_restart_file": str(vacs_restart_file),
             "run_time": str(run_time),
             "dump_cluster": str(dump_cluster_path),
-            "dump_cluster_nb": str(dump_cluster_nb_path),
             "dump_final": str(dump_final_path),
             "dump_during": str(dump_during_path),
             "dump_crater_id": str(dump_crater_id_path),
             "write_file": str(write_file),
+            "energy_file": str(run_dir / "energy.txt"),
         }
 
         vars_path: Path = run_dir / "vars.json"
@@ -633,9 +585,9 @@ def main() -> None:
         lammps_util.save_table(CARBON_TABLE, carbon_info, mode="a")
         # save_table(run_dir / 'surface_table.txt', surface_data, mode='w')
         lammps_util.save_table(SURFACE_TABLE, [[run_num, sigma]], mode="a")
-        lammps_util.save_table(
-            SPUTTER_COUNT_TABLE, [[run_num, *cnt_sputtered]], mode="a"
-        )
+        # lammps_util.save_table(
+        #     SPUTTER_COUNT_TABLE, [[run_num, *cnt_sputtered]], mode="a"
+        # )
 
         # dump_final_no_cluster_path.unlink()
 
