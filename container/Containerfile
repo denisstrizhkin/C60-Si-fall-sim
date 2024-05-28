@@ -1,30 +1,28 @@
-FROM gentoo/stage3:nomultilib
+FROM gentoo/stage3 as builder
 
-RUN emerge-webrsync && emerge --sync
+RUN echo 'GENTOO_MIRRORS="https://ftp.lysator.liu.se/gentoo/"' >> /etc/portage/make.conf \
+  && echo 'FEATURES="-ipc-sandbox -network-sandbox -pid-sandbox"' >> /etc/portage/make.conf \
+    && getuto && emerge-webrsync
 
-RUN emerge getuto && getuto
+RUN echo 'sci-physics/lammps' >> /etc/portage/package.accept_keywords/all
 
-RUN rmdir /etc/portage/{package.use,package.accept_keywords,package.mask} \
-  && echo 'FEATURES="-ipc-sandbox -network-sandbox -pid-sandbox"' >> /etc/portage/make.conf
-
-RUN emerge -j 5 -DNug @world
-
-RUN echo 'sci-physics/lammps' > /etc/portage/package.accept_keywords
-
-RUN echo 'sci-physics/lammps extra mpi opencl openmp python' > /etc/portage/package.use \
-  && echo 'sci-libs/netcdf mpi' >> /etc/portage/package.use \
-  && echo 'sci-libs/hdf5 mpi' >> /etc/portage/package.use \
-  && echo 'virtual/mpi romio' >> /etc/portage/package.use
+RUN echo 'sci-physics/lammps extra mpi opencl openmp python' >> /etc/portage/package.use/lammps \
+  && echo 'sci-libs/netcdf mpi' >> /etc/portage/package.use/lammps \
+  && echo 'sci-libs/hdf5 mpi' >> /etc/portage/package.use/lammps \
+  && echo 'virtual/mpi romio' >> /etc/portage/package.use/lammps
 
 RUN emerge -j 5 -g lammps
 
-RUN echo 'dev-python/pillow webp' >> /etc/portage/package.use \
-  && echo 'virtual/imagemagick-tools tiff jpeg' >> /etc/portage/package.use \
-  && echo 'media-gfx/imagemagick tiff jpeg' >> /etc/portage/package.use
+RUN echo 'dev-python/pillow webp' >> /etc/portage/package.use/python \
+  && echo 'virtual/imagemagick-tools tiff jpeg' >> /etc/portage/package.use/python \
+  && echo 'media-gfx/imagemagick tiff jpeg' >> /etc/portage/package.use/python \
+  && echo 'dev-lang/python tk' >> /etc/portage/package.use/python
 
-RUN emerge -j 5 -g numpy matplotlib virtualenv mpi4py
+RUN emerge -j 5 -g numpy matplotlib virtualenv mpi4py scipy mypy black
 
-RUN emerge -j 5 -gu sudo app-crypt/gnupg app-crypt/pinentry bash bash-completion dev-vcs/git curl sys-devel/bc lsof
+RUN emerge -j 5 -DNug @world
 
-RUN rm -rf /var/cache/distfiles \
-  && emerge -c
+RUN emerge -c && rm -rf /var/db/repos && rm -rf /var/cache
+
+FROM gentoo/stage3 as final
+COPY --from=builder / /
