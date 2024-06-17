@@ -431,14 +431,13 @@ def main() -> None:
         ):
             continue
 
-        dump_cluster = Dump(dump_cluster_path)
-        dump_cluster_nb = Dump(dump_cluster_nb_path)
         dump_final = Dump(dump_final_path)
+        lammps_util.create_clusters_dump(
+            dump_final.name, dump_final.timesteps[0][0], dump_cluster_path
+        )
+        dump_cluster = Dump(dump_cluster_path)
 
-        cluster_atoms_dict, rim_atoms = get_cluster_atoms_dict(dump_cluster, zero_lvl)
-        cluster_atoms_dict_nb, _ = get_cluster_atoms_dict(dump_cluster_nb, zero_lvl)
-
-
+        cluster_atoms_dict, rim_atoms = lammps_util.get_cluster_atoms_dict(dump_cluster)
         cluster_dict, carbon_sputtered = get_cluster_dict(cluster_atoms_dict)
 
         clusters_table = get_clusters_table(cluster_dict, run_num).astype(float)
@@ -469,25 +468,10 @@ def main() -> None:
             dump_final_no_cluster, run_dir, lattice, zero_lvl, C60_WIDTH
         )
 
-        dump_cluster_id = Dump(dump_crater_id_path)
-        if len(dump_cluster_id["id"]) > 0 and not IS_MULTIFALL:
-            vac_ids = " ".join(map(str, map(int, dump_cluster_id["id"])))
-
-            if (
-                lammps_util.lammps_run(
-                    SCRIPT_DIR / "in.crater",
-                    {
-                        "input_file": str(input_file),
-                        "dump_crater": str(dump_crater_path),
-                        "vac_ids": vac_ids,
-                    },
-                )
-                != 0
-            ):
-                continue
-
+        if IS_MULTIFALL == False:
+            lammps_util.create_crater_dump(run_dir)
             dump_crater = Dump(dump_crater_path)
-            crater_info = get_crater_info(dump_crater, run_num, zero_lvl)
+            crater_info = lammps_util.get_crater_info(dump_crater, sim_n, zero_lvl)
             lammps_util.save_table(CRATER_TABLE, crater_info, mode="a")
 
         lammps_util.save_table(CLUSTERS_TABLE, clusters_table, mode="a")

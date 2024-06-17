@@ -1,3 +1,0 @@
-group clusters variable is_sputtered
-compute clusters all cluster/atom 3
-compute mass clusters property/atom mass
