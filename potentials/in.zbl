@@ -6,8 +6,9 @@ atom_style atomic
 region sym block -10 10 -10 10 -10 10
 create_box 2 sym
 
+variable dx equal "0.05"
 create_atoms 1 single 0 0 0 
-create_atoms 2 single 0.05 0 0 
+create_atoms 2 single ${dx} 0 0 
 
 mass 1 28.08553
 mass 2 12.011
@@ -24,8 +25,8 @@ neigh_modify one 4000
 
 timestep 1
 
-fix write all print 1 "$(time) $(pe)" file zbl.txt screen yes
-fix move move move linear 0.05 0 0
+fix write all print 1 "$(time*v_dx+v_dx) $(pe)" file zbl.txt screen yes
+fix move move move linear ${dx} 0 0
 
 dump all all custom 1 dump.all id type x y z
 
