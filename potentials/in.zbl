@@ -15,7 +15,9 @@ mass 2 12.011
 group move type 2
 
 pair_style  zbl 3.0 3.0
-pair_coeff  * * zbl 14.0 6.0
+pair_coeff  1 1 14.0 14.0
+pair_coeff  1 2 14.0 6.0
+pair_coeff  2 2 6.0 6.0
 neigh_modify every 1 delay 0 check no
 neigh_modify binsize 0.0
 neigh_modify one 4000
