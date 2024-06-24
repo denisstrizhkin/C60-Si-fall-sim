@@ -14,15 +14,15 @@ mass 2 12.011
 
 group move type 2
 
-pair_style  lj/cut 3
-pair_coeff  * * 0.405 1.46
+pair_style  zbl 3.0 3.0
+pair_coeff  * * zbl 14.0 6.0
 neigh_modify every 1 delay 0 check no
 neigh_modify binsize 0.0
 neigh_modify one 4000
 
 timestep 1
 
-fix write all print 1 "$(time) $(pe)" file lj.txt screen yes
+fix write all print 1 "$(time) $(pe)" file zbl.txt screen yes
 fix move move move linear 0.05 0 0
 
 dump all all custom 1 dump.all id type x y z
