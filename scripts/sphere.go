@@ -147,29 +147,27 @@ func calc_cluster_center(dump Dump, timestep int) (float32, float32) {
 	return c_x / count, c_y / count
 }
 
-func sphere_tables(dump Dump, run_dir string, zero_lvl, c_x, c_y float32) {
-	table_path := run_dir + "/sphere_ek.txt"
-	table, err := os.Create(table_path)
-	if err != nil {
-		log.Fatalln("can't open file: ", table_path)
-	}
-	defer table.Close()
-
-	table_str := make([][]string, len(dump.timesteps)+1)
+func sphere_tables(dump Dump, zero_lvl, c_x, c_y float32) ([][]string, [][]string) {
+	tab_ek := make([][]string, len(dump.timesteps)+1)
+	tab_count := make([][]string, len(dump.timesteps)+1)
 	R_start := 10
 	R_stop := 30
 	d_R := 5
-	for i, _ := range table_str {
-		table_str[i] = make([]string, (R_stop-R_start)/d_R+2)
+	for i, _ := range tab_ek {
+		tab_ek[i] = make([]string, (R_stop-R_start)/d_R+2)
+		tab_count[i] = make([]string, (R_stop-R_start)/d_R+2)
 	}
-	table_str[0][0] = "timestep\\R"
+	tab_ek[0][0] = "timestep\\R"
+	tab_count[0][0] = "timestep\\R"
 
 	for R := R_start; R <= R_stop; R += d_R {
 		log.Println("table Ek - R:", R)
 		j := (R-R_start)/d_R + 1
-		table_str[0][j] = strconv.Itoa(R)
+		tab_ek[0][j] = strconv.Itoa(R)
+		tab_count[0][j] = strconv.Itoa(R)
 		for i, timestep := range dump.timesteps {
 			var sum_ek float32
+			count := 0
 			x := dump.extract("x", timestep)
 			y := dump.extract("y", timestep)
 			z := dump.extract("z", timestep)
@@ -181,21 +179,33 @@ func sphere_tables(dump Dump, run_dir string, zero_lvl, c_x, c_y float32) {
 				m := dx*dx + dy*dy + dz*dz
 				if m <= float32(R*R) && z[a_i] <= zero_lvl+1 {
 					sum_ek += ek[a_i]
+					count++
 				}
 			}
-			table_str[i+1][j] = strconv.FormatFloat(float64(sum_ek), 'f', -1, 32)
-			table_str[i+1][0] = strconv.Itoa(timestep)
+			tab_ek[i+1][j] = strconv.FormatFloat(float64(sum_ek), 'f', -1, 32)
+			tab_ek[i+1][0] = strconv.Itoa(timestep)
+			tab_count[i+1][j] = strconv.Itoa(count)
+			tab_count[i+1][0] = strconv.Itoa(timestep)
 		}
 	}
 
-	for _, row := range table_str {
+	return tab_ek, tab_count
+}
+
+func write_table(tab [][]string, path string) {
+	f, err := os.Create(path)
+	if err != nil {
+		log.Fatalln("can't open file: ", path)
+	}
+	defer f.Close()
+	for _, row := range tab {
 		for j, cell := range row {
 			if j > 0 {
-				table.WriteString("\t")
+				f.WriteString("\t")
 			}
-			table.WriteString(cell)
+			f.WriteString(cell)
 		}
-		table.WriteString("\n")
+		f.WriteString("\n")
 	}
 }
 
@@ -214,5 +224,9 @@ func main() {
 	center_x, center_y := calc_cluster_center(dump, 0)
 	log.Printf("zero_lvl: %f, center: (%f, %f)\n", zero_lvl, center_x, center_y)
 
-	sphere_tables(dump, run_dir, zero_lvl, center_x, center_y)
+	sum_ek_path := run_dir + "/sphere_sum_ek.txt"
+	count_path := run_dir + "/sphere_count.txt"
+	tab_sum_ek, tab_count := sphere_tables(dump, zero_lvl, center_x, center_y)
+	write_table(tab_sum_ek, sum_ek_path)
+	write_table(tab_count, count_path)
 }
