@@ -10,7 +10,7 @@ import (
 )
 
 type Dump struct {
-	data      map[string]map[int][]float32
+	data      map[string]map[int][]float64
 	timesteps []int
 }
 
@@ -23,7 +23,7 @@ func NewDump(path string) Dump {
 
 	scanner := bufio.NewScanner(file)
 	dump := Dump{
-		data:      make(map[string]map[int][]float32),
+		data:      make(map[string]map[int][]float64),
 		timesteps: make([]int, 0),
 	}
 	keys := make([]string, 0)
@@ -70,12 +70,12 @@ func NewDump(path string) Dump {
 			if len(keys) == 0 {
 				for _, key := range strings.Split(scanner.Text(), " ")[2:] {
 					keys = append(keys, key)
-					dump.data[key] = make(map[int][]float32)
+					dump.data[key] = make(map[int][]float64)
 				}
 			}
 
 			for _, val := range dump.data {
-				val[current_timestep] = make([]float32, atom_count)
+				val[current_timestep] = make([]float64, atom_count)
 			}
 			continue
 		}
@@ -96,16 +96,16 @@ func NewDump(path string) Dump {
 	return dump
 }
 
-func (d Dump) extract(field string, timestep int) []float32 {
+func (d Dump) extract(field string, timestep int) []float64 {
 	return d.data[field][timestep]
 }
 
-func parse_float(s string) float32 {
-	f64, err := strconv.ParseFloat(s, 32)
+func parse_float(s string) float64 {
+	f64, err := strconv.ParseFloat(s, 64)
 	if err != nil {
-		log.Fatalln("parsing float32: ", s, err)
+		log.Fatalln("parsing float64: ", s, err)
 	}
-	return float32(f64)
+	return f64
 }
 
 func parse_int(s string) int {
@@ -116,8 +116,8 @@ func parse_int(s string) int {
 	return i
 }
 
-func calc_zero_lvl(dump Dump, timestep int) float32 {
-	var zero_lvl float32 = math.SmallestNonzeroFloat32
+func calc_zero_lvl(dump Dump, timestep int) float64 {
+	zero_lvl := math.SmallestNonzeroFloat64
 	z := dump.extract("z", timestep)
 	type_ := dump.extract("type", timestep)
 
@@ -130,8 +130,8 @@ func calc_zero_lvl(dump Dump, timestep int) float32 {
 	return zero_lvl
 }
 
-func calc_cluster_center(dump Dump, timestep int) (float32, float32) {
-	var c_x, c_y, count float32
+func calc_cluster_center(dump Dump, timestep int) (float64, float64) {
+	var c_x, c_y, count float64
 	x := dump.extract("x", timestep)
 	y := dump.extract("y", timestep)
 	type_ := dump.extract("type", timestep)
@@ -147,13 +147,13 @@ func calc_cluster_center(dump Dump, timestep int) (float32, float32) {
 	return c_x / count, c_y / count
 }
 
-func sphere_tables(dump Dump, zero_lvl, c_x, c_y float32) ([][]string, [][]string) {
+func sphere_tables(dump Dump, zero_lvl, c_x, c_y float64) ([][]string, [][]string) {
 	tab_ek := make([][]string, len(dump.timesteps)+1)
 	tab_count := make([][]string, len(dump.timesteps)+1)
 	R_start := 10
 	R_stop := 30
 	d_R := 5
-	for i, _ := range tab_ek {
+	for i := range tab_ek {
 		tab_ek[i] = make([]string, (R_stop-R_start)/d_R+2)
 		tab_count[i] = make([]string, (R_stop-R_start)/d_R+2)
 	}
@@ -166,7 +166,7 @@ func sphere_tables(dump Dump, zero_lvl, c_x, c_y float32) ([][]string, [][]strin
 		tab_ek[0][j] = strconv.Itoa(R)
 		tab_count[0][j] = strconv.Itoa(R)
 		for i, timestep := range dump.timesteps {
-			var sum_ek float32
+			var sum_ek float64
 			count := 0
 			x := dump.extract("x", timestep)
 			y := dump.extract("y", timestep)
@@ -177,7 +177,7 @@ func sphere_tables(dump Dump, zero_lvl, c_x, c_y float32) ([][]string, [][]strin
 				dy := y[a_i] - c_x
 				dz := z[a_i] - zero_lvl
 				m := dx*dx + dy*dy + dz*dz
-				if m <= float32(R*R) && z[a_i] <= zero_lvl+1 {
+				if m <= float64(R*R) && z[a_i] <= zero_lvl+1 {
 					sum_ek += ek[a_i]
 					count++
 				}
@@ -192,24 +192,25 @@ func sphere_tables(dump Dump, zero_lvl, c_x, c_y float32) ([][]string, [][]strin
 	return tab_ek, tab_count
 }
 
-func velocity_table(dump Dump, zero_lvl, c_x, c_y float32) [][]string {
+func velocity_table(dump Dump, zero_lvl, c_x, c_y float64) [][]string {
 	tab_vel := make([][]string, len(dump.timesteps)+1)
 	vel := make([][]int, len(dump.timesteps))
 	bin_start := -180
 	bin_end := 180
 	bin_width := 10
+	bin_length := (bin_end - bin_start)
 	R := 20
 	height := 10
 	for i := range tab_vel {
-		tab_vel[i] = make([]string, (bin_end-bin_start)/bin_width+1)
+		tab_vel[i] = make([]string, bin_length/bin_width+1)
 		if i != 0 {
 			tab_vel[i][0] = strconv.Itoa(dump.timesteps[i-1])
 			vel[i-1] = make([]int, len(tab_vel[i])-1)
 		}
 	}
 	tab_vel[0][0] = "timestep\\deg"
-	for i := 5; i <= 175; i += 10 {
-		tab_vel[0][i/10+1] = strconv.Itoa(i)
+	for i := bin_width / 2; i <= bin_length-(bin_width/2); i += 10 {
+		tab_vel[0][i/10+1] = strconv.Itoa(i + bin_start)
 	}
 
 	for j, timestep := range dump.timesteps {
@@ -224,17 +225,18 @@ func velocity_table(dump Dump, zero_lvl, c_x, c_y float32) [][]string {
 			dy := y[i] - c_y
 			dz := z[i] - zero_lvl
 			m := dx*dx + dy*dy
-			if m <= float32(R*R) && math.Abs(float64(dz)) <= float64(height) {
-				v_len := math.Sqrt(float64(vx[i]*vx[i] + vy[i]*vy[i] + vz[i]*vz[i]))
-				angle := math.Acos(float64(vz[i])/v_len) * 180.0 / math.Pi
-				if float32(dx*vx + dy*vy) > 0{ 
-					angle = (-1)*angle
+			if m <= float64(R*R) && math.Abs(dz) <= float64(height) {
+				v_len := math.Sqrt(vx[i]*vx[i] + vy[i]*vy[i] + vz[i]*vz[i])
+				angle := math.Acos(vz[i]/v_len) * 180.0 / math.Pi
+				if float64(dx*vx[i]+dy*vy[i]) > 0 {
+					angle = (-1) * angle
 				}
 				index := int(math.Round(angle))
 				if index == bin_end {
 					index--
 				}
-				index /= 10
+				index -= bin_start
+				index /= bin_width
 				vel[j][index]++
 			}
 		}
