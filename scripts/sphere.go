@@ -227,8 +227,9 @@ func velocity_table(dump Dump, zero_lvl, c_x, c_y float32) [][]string {
 			if m <= float32(R*R) && math.Abs(float64(dz)) <= float64(height) {
 				v_len := math.Sqrt(float64(vx[i]*vx[i] + vy[i]*vy[i] + vz[i]*vz[i]))
 				angle := math.Acos(float64(vz[i])/v_len) * 180.0 / math.Pi
-				if float32(dx*vx + dy*vy) < 0 
+				if float32(dx*vx + dy*vy) > 0{ 
 					angle = (-1)*angle
+				}
 				index := int(math.Round(angle))
 				if index == bin_end {
 					index--
