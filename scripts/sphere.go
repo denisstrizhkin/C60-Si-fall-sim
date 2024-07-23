@@ -195,7 +195,7 @@ func sphere_tables(dump Dump, zero_lvl, c_x, c_y float32) ([][]string, [][]strin
 func velocity_table(dump Dump, zero_lvl, c_x, c_y float32) [][]string {
 	tab_vel := make([][]string, len(dump.timesteps)+1)
 	vel := make([][]int, len(dump.timesteps))
-	bin_start := 0
+	bin_start := -180
 	bin_end := 180
 	bin_width := 10
 	R := 20
@@ -220,13 +220,15 @@ func velocity_table(dump Dump, zero_lvl, c_x, c_y float32) [][]string {
 		vy := dump.extract("vy", timestep)
 		vz := dump.extract("vz", timestep)
 		for i := range x {
-			dx := x[i] - c_y
-			dy := y[i] - c_x
+			dx := x[i] - c_x
+			dy := y[i] - c_y
 			dz := z[i] - zero_lvl
 			m := dx*dx + dy*dy
 			if m <= float32(R*R) && math.Abs(float64(dz)) <= float64(height) {
 				v_len := math.Sqrt(float64(vx[i]*vx[i] + vy[i]*vy[i] + vz[i]*vz[i]))
 				angle := math.Acos(float64(vz[i])/v_len) * 180.0 / math.Pi
+				if float32(dx*vx + dy*vy) < 0 
+					angle = (-1)*angle
 				index := int(math.Round(angle))
 				if index == bin_end {
 					index--
