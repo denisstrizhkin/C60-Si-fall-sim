@@ -192,6 +192,60 @@ func sphere_tables(dump Dump, zero_lvl, c_x, c_y float32) ([][]string, [][]strin
 	return tab_ek, tab_count
 }
 
+func velocity_table(dump Dump, zero_lvl, c_x, c_y float32) [][]string {
+	tab_vel := make([][]string, len(dump.timesteps)+1)
+	vel := make([][]int, len(dump.timesteps))
+	bin_start := 0
+	bin_end := 180
+	bin_width := 10
+	R := 20
+	height := 10
+	for i := range tab_vel {
+		tab_vel[i] = make([]string, (bin_end-bin_start)/bin_width+1)
+		if i != 0 {
+			tab_vel[i][0] = strconv.Itoa(dump.timesteps[i-1])
+			vel[i-1] = make([]int, len(tab_vel[i])-1)
+		}
+	}
+	tab_vel[0][0] = "timestep\\deg"
+	for i := 5; i <= 175; i += 10 {
+		tab_vel[0][i/10+1] = strconv.Itoa(i)
+	}
+
+	for j, timestep := range dump.timesteps {
+		x := dump.extract("x", timestep)
+		y := dump.extract("y", timestep)
+		z := dump.extract("z", timestep)
+		vx := dump.extract("vx", timestep)
+		vy := dump.extract("vy", timestep)
+		vz := dump.extract("vz", timestep)
+		for i := range x {
+			dx := x[i] - c_y
+			dy := y[i] - c_x
+			dz := z[i] - zero_lvl
+			m := dx*dx + dy*dy
+			if m <= float32(R*R) && math.Abs(float64(dz)) <= float64(height) {
+				v_len := math.Sqrt(float64(vx[i]*vx[i] + vy[i]*vy[i] + vz[i]*vz[i]))
+				angle := math.Acos(float64(vz[i])/v_len) * 180.0 / math.Pi
+				index := int(math.Round(angle))
+				if index == bin_end {
+					index--
+				}
+				index /= 10
+				vel[j][index]++
+			}
+		}
+	}
+
+	for i, row := range vel {
+		for j, cel := range row {
+			tab_vel[i+1][j+1] = strconv.Itoa(cel)
+		}
+	}
+
+	return tab_vel
+}
+
 func write_table(tab [][]string, path string) {
 	f, err := os.Create(path)
 	if err != nil {
@@ -229,4 +283,8 @@ func main() {
 	tab_sum_ek, tab_count := sphere_tables(dump, zero_lvl, center_x, center_y)
 	write_table(tab_sum_ek, sum_ek_path)
 	write_table(tab_count, count_path)
+
+	vel_path := run_dir + "/vel_distrib.txt"
+	tab_vel := velocity_table(dump, zero_lvl, center_x, center_y)
+	write_table(tab_vel, vel_path)
 }
