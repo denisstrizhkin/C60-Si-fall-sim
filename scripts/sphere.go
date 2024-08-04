@@ -51,9 +51,9 @@ func NewDump(path string) Dump {
 			is_read_timestep = false
 			current_timestep = parse_int(scanner.Text())
 			dump.timesteps = append(dump.timesteps, current_timestep)
-			if current_timestep == 500 {
-				return dump
-			}
+			// if current_timestep == 500 {
+			// 	return dump
+			// }
 			log.Println("reading timestep:", current_timestep)
 			continue
 		}
@@ -260,30 +260,19 @@ func velocity_table(dump Dump, zero_lvl, c_x, c_y float64) (tab [][]float64, row
 	return
 }
 
-func energy_distr(dump Dump, zero_lvl, c_x, c_y float64) [][]string {
-	tab_ke := make([][]string, len(dump.timesteps)+1)
-	ke := make([][]int, len(dump.timesteps))
+func energy_distr(dump Dump, zero_lvl, c_x, c_y float64) (tab [][]float64, rows, cols []string) {
+	tab = make([][]float64, len(dump.timesteps))
+	ke := make([][]float64, len(dump.timesteps))
+	rows = make([]string, len(dump.timesteps))
 	var cyllinder_r float64 = 20
 	var cyllinder_h float64 = 10
 	var bin_width float64 = 0.025
 	var bin_start float64 = 0
 	var bin_end float64 = 2
-	bin_length := bin_end - bin_start
-	bin_count := int(bin_length / bin_width)
-
-	for i := range tab_ke {
-		tab_ke[i] = make([]string, bin_count+1)
-		if i != 0 {
-			tab_ke[i][0] = strconv.Itoa(dump.timesteps[i-1])
-			ke[i-1] = make([]int, len(tab_ke[i])-1)
-		}
-	}
-	tab_ke[0][0] = "timestep\\ke"
-	for i := range bin_count {
-		tab_ke[0][i+1] = strconv.FormatFloat(float64(i)*bin_width+bin_start+bin_width/2, 'f', FLOAT_PREC, 64)
-	}
-
+	bin_count := int((bin_end - bin_start) / bin_width)
+	cols = make([]string, bin_count)
 	for j, timestep := range dump.timesteps {
+		rows[j] = strconv.Itoa(timestep)
 		x := dump.extract("x", timestep)
 		y := dump.extract("y", timestep)
 		z := dump.extract("z", timestep)
@@ -294,29 +283,20 @@ func energy_distr(dump Dump, zero_lvl, c_x, c_y float64) [][]string {
 			dz := z[i] - zero_lvl
 			m := dx*dx + dy*dy
 			if m <= cyllinder_r*cyllinder_r && math.Abs(dz) <= cyllinder_h {
-				cur_kin_e := kin_e[i]
-				if cur_kin_e > bin_end {
-					cur_kin_e = bin_end
-				}
-				if cur_kin_e < bin_start {
-					cur_kin_e = bin_start
-				}
-				index := int((cur_kin_e - bin_start) / bin_width)
-				if index == bin_count {
-					index--
-				}
-				ke[j][index]++
+				ke[j] = append(ke[j], kin_e[i])
 			}
 		}
 	}
-
-	for i, row := range ke {
-		for j, cel := range row {
-			tab_ke[i+1][j+1] = strconv.Itoa(cel)
+	for j := range ke {
+		bins, counts := histogram(ke[j], bin_start, bin_end, bin_count, false)
+		tab[j] = counts
+		if j == 0 {
+			for i, bin := range bins {
+				cols[i] = strconv.FormatFloat(bin, 'f', FLOAT_PREC, 64)
+			}
 		}
 	}
-
-	return tab_ke
+	return
 }
 
 func write_table(vals [][]float64, rows, cols []string, corner, path string) {
@@ -362,9 +342,10 @@ func create_vel_dist_table(dump Dump, run_dir string, zero_lvl, center_x, center
 }
 
 func create_energy_dist_table(dump Dump, run_dir string, zero_lvl, center_x, center_y float64) {
-	// ke_path := run_dir + "/ke_distrib.txt"
-	// tab_ke := energy_distr(dump, zero_lvl, center_x, center_y)
-	// write_table(tab_ke, ke_path)
+	path := run_dir + "/ke_distrib.txt"
+	tab, rows, cols := energy_distr(dump, zero_lvl, center_x, center_y)
+	corner := "timestep\\deg"
+	write_table(tab, rows, cols, corner, path)
 }
 
 func main() {
@@ -384,4 +365,5 @@ func main() {
 
 	create_sphere_tables(dump, run_dir, zero_lvl, center_x, center_y)
 	create_vel_dist_table(dump, run_dir, zero_lvl, center_x, center_y)
+	create_energy_dist_table(dump, run_dir, zero_lvl, center_x, center_y)
 }
