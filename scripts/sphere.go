@@ -9,6 +9,10 @@ import (
 	"strings"
 )
 
+const (
+	FLOAT_PREC = 5
+)
+
 type Dump struct {
 	data      map[string]map[int][]float64
 	timesteps []int
@@ -182,7 +186,7 @@ func sphere_tables(dump Dump, zero_lvl, c_x, c_y float64) ([][]string, [][]strin
 					count++
 				}
 			}
-			tab_ek[i+1][j] = strconv.FormatFloat(float64(sum_ek), 'f', -1, 32)
+			tab_ek[i+1][j] = strconv.FormatFloat(float64(sum_ek), 'f', FLOAT_PREC, 64)
 			tab_ek[i+1][0] = strconv.Itoa(timestep)
 			tab_count[i+1][j] = strconv.Itoa(count)
 			tab_count[i+1][0] = strconv.Itoa(timestep)
@@ -195,22 +199,24 @@ func sphere_tables(dump Dump, zero_lvl, c_x, c_y float64) ([][]string, [][]strin
 func velocity_table(dump Dump, zero_lvl, c_x, c_y float64) [][]string {
 	tab_vel := make([][]string, len(dump.timesteps)+1)
 	vel := make([][]int, len(dump.timesteps))
-	bin_start := -180
-	bin_end := 180
-	bin_width := 10
+	var cyllinder_r float64 = 20
+	var cyllinder_h float64 = 10
+	var bin_width float64 = 10
+	var bin_start float64 = -180
+	var bin_end float64 = 180
 	bin_length := (bin_end - bin_start)
-	R := 20
-	height := 10
+	bin_count := int(bin_length / bin_width)
+
 	for i := range tab_vel {
-		tab_vel[i] = make([]string, bin_length/bin_width+1)
+		tab_vel[i] = make([]string, bin_count+1)
 		if i != 0 {
 			tab_vel[i][0] = strconv.Itoa(dump.timesteps[i-1])
 			vel[i-1] = make([]int, len(tab_vel[i])-1)
 		}
 	}
 	tab_vel[0][0] = "timestep\\deg"
-	for i := bin_width / 2; i <= bin_length-(bin_width/2); i += 10 {
-		tab_vel[0][i/10+1] = strconv.Itoa(i + bin_start)
+	for i := range bin_count {
+		tab_vel[0][i+1] = strconv.FormatFloat(float64(i)*bin_width+bin_start+bin_width/2, 'f', FLOAT_PREC, 64)
 	}
 
 	for j, timestep := range dump.timesteps {
@@ -225,18 +231,25 @@ func velocity_table(dump Dump, zero_lvl, c_x, c_y float64) [][]string {
 			dy := y[i] - c_y
 			dz := z[i] - zero_lvl
 			m := dx*dx + dy*dy
-			if m <= float64(R*R) && math.Abs(dz) <= float64(height) {
+			if m <= cyllinder_r*cyllinder_r && math.Abs(dz) <= cyllinder_h {
 				v_len := math.Sqrt(vx[i]*vx[i] + vy[i]*vy[i] + vz[i]*vz[i])
 				angle := math.Acos(vz[i]/v_len) * 180.0 / math.Pi
+				if v_len < 10 {
+					continue
+				}
 				if float64(dx*vx[i]+dy*vy[i]) > 0 {
 					angle = (-1) * angle
 				}
-				index := int(math.Round(angle))
-				if index == bin_end {
+				if angle < bin_start {
+					continue
+				}
+				if angle > bin_end {
+					continue
+				}
+				index := int((angle - bin_start) / bin_width)
+				if index == bin_count {
 					index--
 				}
-				index -= bin_start
-				index /= bin_width
 				vel[j][index]++
 			}
 		}
