@@ -121,16 +121,14 @@ func parse_int(s string) int {
 }
 
 func calc_zero_lvl(dump Dump, timestep int) float64 {
-	zero_lvl := math.SmallestNonzeroFloat64
+	zero_lvl := -math.MaxFloat64
 	z := dump.extract("z", timestep)
 	type_ := dump.extract("type", timestep)
-
 	for i := range z {
 		if z[i] > zero_lvl && type_[i] == 1 {
 			zero_lvl = z[i]
 		}
 	}
-
 	return zero_lvl
 }
 
@@ -139,7 +137,6 @@ func calc_cluster_center(dump Dump, timestep int) (float64, float64) {
 	x := dump.extract("x", timestep)
 	y := dump.extract("y", timestep)
 	type_ := dump.extract("type", timestep)
-
 	for i := range x {
 		if type_[i] == 2 {
 			c_x += x[i]
@@ -147,58 +144,82 @@ func calc_cluster_center(dump Dump, timestep int) (float64, float64) {
 			count++
 		}
 	}
-
 	return c_x / count, c_y / count
 }
 
-func sphere_tables(dump Dump, zero_lvl, c_x, c_y float64) ([][]string, [][]string) {
-	tab_ek := make([][]string, len(dump.timesteps)+1)
-	tab_count := make([][]string, len(dump.timesteps)+1)
-	R_start := 10
-	R_stop := 30
-	d_R := 5
-	for i := range tab_ek {
-		tab_ek[i] = make([]string, (R_stop-R_start)/d_R+2)
-		tab_count[i] = make([]string, (R_stop-R_start)/d_R+2)
+func sphere_tables(dump Dump, zero_lvl, c_x, c_y float64) (tab_ek, tab_count [][]float64, rows, cols []string) {
+	tab_ek = make([][]float64, len(dump.timesteps))
+	tab_count = make([][]float64, len(dump.timesteps))
+	rows = make([]string, len(dump.timesteps))
+	var R_start float64 = 10
+	var R_stop float64 = 30
+	var R_d float64 = 5
+	R_count := int((R_stop-R_start)/R_d + 1)
+	for i, timestep := range dump.timesteps {
+		tab_ek[i] = make([]float64, R_count)
+		tab_count[i] = make([]float64, R_count)
+		rows[i] = strconv.Itoa(timestep)
 	}
-	tab_ek[0][0] = "timestep\\R"
-	tab_count[0][0] = "timestep\\R"
-
-	for R := R_start; R <= R_stop; R += d_R {
-		log.Println("table Ek - R:", R)
-		j := (R-R_start)/d_R + 1
-		tab_ek[0][j] = strconv.Itoa(R)
-		tab_count[0][j] = strconv.Itoa(R)
+	cols = make([]string, R_count)
+	for j := range R_count {
+		R := float64(j)*R_d + R_start
+		cols[j] = strconv.FormatFloat(R, 'f', FLOAT_PREC, 64)
 		for i, timestep := range dump.timesteps {
-			var sum_ek float64
-			count := 0
 			x := dump.extract("x", timestep)
 			y := dump.extract("y", timestep)
 			z := dump.extract("z", timestep)
-			ek := dump.extract("c_atom_ke", timestep)
+			ke := dump.extract("c_atom_ke", timestep)
 			for a_i := range x {
 				dx := x[a_i] - c_y
 				dy := y[a_i] - c_x
 				dz := z[a_i] - zero_lvl
 				m := dx*dx + dy*dy + dz*dz
-				if m <= float64(R*R) && z[a_i] <= zero_lvl+1 {
-					sum_ek += ek[a_i]
-					count++
+				if m <= R*R && z[a_i] <= zero_lvl+1 {
+					tab_ek[i][j] += ke[a_i]
+					tab_count[i][j]++
 				}
 			}
-			tab_ek[i+1][j] = strconv.FormatFloat(float64(sum_ek), 'f', FLOAT_PREC, 64)
-			tab_ek[i+1][0] = strconv.Itoa(timestep)
-			tab_count[i+1][j] = strconv.Itoa(count)
-			tab_count[i+1][0] = strconv.Itoa(timestep)
 		}
 	}
+	return
+}
 
-	return tab_ek, tab_count
+func histogram(vals []float64, start, end float64, count int, cut_ends bool) (bins, counts []float64) {
+	bins = make([]float64, count)
+	counts = make([]float64, count)
+	length := end - start
+	width := length / float64(count)
+
+	for i := range count {
+		bins[i] = start + width*float64(i) + width/2
+	}
+
+	for _, val := range vals {
+		if val < start {
+			if cut_ends {
+				continue
+			}
+			val = start
+		}
+		if val > end {
+			if cut_ends {
+				continue
+			}
+			val = end
+		}
+		index := int((val - start) / width)
+		if index == count {
+			index--
+		}
+		counts[index]++
+	}
+
+	return bins, counts
 }
 
 func velocity_table(dump Dump, zero_lvl, c_x, c_y float64) [][]string {
 	tab_vel := make([][]string, len(dump.timesteps)+1)
-	vel := make([][]int, len(dump.timesteps))
+	vel := make([][]float64, len(dump.timesteps))
 	var cyllinder_r float64 = 20
 	var cyllinder_h float64 = 10
 	var bin_width float64 = 10
@@ -209,9 +230,10 @@ func velocity_table(dump Dump, zero_lvl, c_x, c_y float64) [][]string {
 
 	for i := range tab_vel {
 		tab_vel[i] = make([]string, bin_count+1)
+
 		if i != 0 {
 			tab_vel[i][0] = strconv.Itoa(dump.timesteps[i-1])
-			vel[i-1] = make([]int, len(tab_vel[i])-1)
+			vel[i-1] = make([]float64, len(tab_vel[i])-1)
 		}
 	}
 	tab_vel[0][0] = "timestep\\deg"
@@ -252,12 +274,6 @@ func velocity_table(dump Dump, zero_lvl, c_x, c_y float64) [][]string {
 				}
 				vel[j][index]++
 			}
-		}
-	}
-
-	for i, row := range vel {
-		for j, cel := range row {
-			tab_vel[i+1][j+1] = strconv.Itoa(cel)
 		}
 	}
 
@@ -323,21 +339,39 @@ func energy_distr(dump Dump, zero_lvl, c_x, c_y float64) [][]string {
 	return tab_ke
 }
 
-func write_table(tab [][]string, path string) {
+func write_table(vals [][]float64, rows, cols []string, corner, path string) {
 	f, err := os.Create(path)
 	if err != nil {
-		log.Fatalln("can't open file: ", path)
+		log.Fatalf("can't open file: %s - %v", path, err)
 	}
 	defer f.Close()
-	for _, row := range tab {
-		for j, cell := range row {
-			if j > 0 {
-				f.WriteString("\t")
-			}
-			f.WriteString(cell)
-		}
-		f.WriteString("\n")
+
+	w := bufio.NewWriter(f)
+	defer w.Flush()
+	w.WriteString(corner)
+	for _, col := range cols {
+		w.WriteRune('\t')
+		w.WriteString(col)
 	}
+	w.WriteRune('\n')
+
+	for i, row := range rows {
+		w.WriteString(row)
+		for _, val := range vals[i] {
+			w.WriteRune('\t')
+			w.WriteString(strconv.FormatFloat(val, 'f', FLOAT_PREC, 64))
+		}
+		w.WriteRune('\n')
+	}
+}
+
+func create_sphere_tables(dump Dump, run_dir string, zero_lvl, center_x, center_y float64) {
+	ke_path := run_dir + "/sphere_ke.txt"
+	count_path := run_dir + "/sphere_count.txt"
+	tab_ke, tab_count, rows, cols := sphere_tables(dump, zero_lvl, center_x, center_y)
+	corner := "timestep\\R"
+	write_table(tab_ke, rows, cols, corner, ke_path)
+	write_table(tab_count, rows, cols, corner, count_path)
 }
 
 func main() {
@@ -355,17 +389,13 @@ func main() {
 	center_x, center_y := calc_cluster_center(dump, 0)
 	log.Printf("zero_lvl: %f, center: (%f, %f)\n", zero_lvl, center_x, center_y)
 
-	sum_ek_path := run_dir + "/sphere_sum_ek.txt"
-	count_path := run_dir + "/sphere_count.txt"
-	tab_sum_ek, tab_count := sphere_tables(dump, zero_lvl, center_x, center_y)
-	write_table(tab_sum_ek, sum_ek_path)
-	write_table(tab_count, count_path)
+	create_sphere_tables(dump, run_dir, zero_lvl, center_x, center_y)
 
-	vel_path := run_dir + "/vel_distrib.txt"
-	tab_vel := velocity_table(dump, zero_lvl, center_x, center_y)
-	write_table(tab_vel, vel_path)
+	// vel_path := run_dir + "/vel_distrib.txt"
+	// tab_vel := velocity_table(dump, zero_lvl, center_x, center_y)
+	// write_table(tab_vel, vel_path)
 
-	ke_path := run_dir + "/ke_distrib.txt"
-	tab_ke := energy_distr(dump, zero_lvl, center_x, center_y)
-	write_table(tab_ke, ke_path)
+	// ke_path := run_dir + "/ke_distrib.txt"
+	// tab_ke := energy_distr(dump, zero_lvl, center_x, center_y)
+	// write_table(tab_ke, ke_path)
 }
