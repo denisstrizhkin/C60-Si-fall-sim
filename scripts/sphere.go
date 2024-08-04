@@ -51,9 +51,9 @@ func NewDump(path string) Dump {
 			is_read_timestep = false
 			current_timestep = parse_int(scanner.Text())
 			dump.timesteps = append(dump.timesteps, current_timestep)
-			// if current_timestep == 500 {
-			// 	return dump
-			// }
+			if current_timestep == 500 {
+				return dump
+			}
 			log.Println("reading timestep:", current_timestep)
 			continue
 		}
@@ -217,31 +217,19 @@ func histogram(vals []float64, start, end float64, count int, cut_ends bool) (bi
 	return bins, counts
 }
 
-func velocity_table(dump Dump, zero_lvl, c_x, c_y float64) [][]string {
-	tab_vel := make([][]string, len(dump.timesteps)+1)
-	vel := make([][]float64, len(dump.timesteps))
+func velocity_table(dump Dump, zero_lvl, c_x, c_y float64) (tab [][]float64, rows, cols []string) {
+	tab = make([][]float64, len(dump.timesteps))
+	angles := make([][]float64, len(dump.timesteps))
+	rows = make([]string, len(dump.timesteps))
 	var cyllinder_r float64 = 20
 	var cyllinder_h float64 = 10
 	var bin_width float64 = 10
 	var bin_start float64 = -180
 	var bin_end float64 = 180
-	bin_length := (bin_end - bin_start)
-	bin_count := int(bin_length / bin_width)
-
-	for i := range tab_vel {
-		tab_vel[i] = make([]string, bin_count+1)
-
-		if i != 0 {
-			tab_vel[i][0] = strconv.Itoa(dump.timesteps[i-1])
-			vel[i-1] = make([]float64, len(tab_vel[i])-1)
-		}
-	}
-	tab_vel[0][0] = "timestep\\deg"
-	for i := range bin_count {
-		tab_vel[0][i+1] = strconv.FormatFloat(float64(i)*bin_width+bin_start+bin_width/2, 'f', FLOAT_PREC, 64)
-	}
-
+	bin_count := int((bin_end - bin_start) / bin_width)
+	cols = make([]string, bin_count)
 	for j, timestep := range dump.timesteps {
+		rows[j] = strconv.Itoa(timestep)
 		x := dump.extract("x", timestep)
 		y := dump.extract("y", timestep)
 		z := dump.extract("z", timestep)
@@ -256,28 +244,20 @@ func velocity_table(dump Dump, zero_lvl, c_x, c_y float64) [][]string {
 			if m <= cyllinder_r*cyllinder_r && math.Abs(dz) <= cyllinder_h {
 				v_len := math.Sqrt(vx[i]*vx[i] + vy[i]*vy[i] + vz[i]*vz[i])
 				angle := math.Acos(vz[i]/v_len) * 180.0 / math.Pi
-				if v_len < 10 {
-					continue
-				}
-				if float64(dx*vx[i]+dy*vy[i]) > 0 {
-					angle = (-1) * angle
-				}
-				if angle < bin_start {
-					continue
-				}
-				if angle > bin_end {
-					continue
-				}
-				index := int((angle - bin_start) / bin_width)
-				if index == bin_count {
-					index--
-				}
-				vel[j][index]++
+				angles[j] = append(angles[j], angle)
 			}
 		}
 	}
-
-	return tab_vel
+	for j := range angles {
+		bins, counts := histogram(angles[j], bin_start, bin_end, bin_count, true)
+		tab[j] = counts
+		if j == 0 {
+			for i, bin := range bins {
+				cols[i] = strconv.FormatFloat(bin, 'f', FLOAT_PREC, 64)
+			}
+		}
+	}
+	return
 }
 
 func energy_distr(dump Dump, zero_lvl, c_x, c_y float64) [][]string {
@@ -374,6 +354,19 @@ func create_sphere_tables(dump Dump, run_dir string, zero_lvl, center_x, center_
 	write_table(tab_count, rows, cols, corner, count_path)
 }
 
+func create_vel_dist_table(dump Dump, run_dir string, zero_lvl, center_x, center_y float64) {
+	path := run_dir + "/vel_distrib.txt"
+	tab, rows, cols := velocity_table(dump, zero_lvl, center_x, center_y)
+	corner := "timestep\\deg"
+	write_table(tab, rows, cols, corner, path)
+}
+
+func create_energy_dist_table(dump Dump, run_dir string, zero_lvl, center_x, center_y float64) {
+	// ke_path := run_dir + "/ke_distrib.txt"
+	// tab_ke := energy_distr(dump, zero_lvl, center_x, center_y)
+	// write_table(tab_ke, ke_path)
+}
+
 func main() {
 	args := os.Args[1:]
 
@@ -390,12 +383,5 @@ func main() {
 	log.Printf("zero_lvl: %f, center: (%f, %f)\n", zero_lvl, center_x, center_y)
 
 	create_sphere_tables(dump, run_dir, zero_lvl, center_x, center_y)
-
-	// vel_path := run_dir + "/vel_distrib.txt"
-	// tab_vel := velocity_table(dump, zero_lvl, center_x, center_y)
-	// write_table(tab_vel, vel_path)
-
-	// ke_path := run_dir + "/ke_distrib.txt"
-	// tab_ke := energy_distr(dump, zero_lvl, center_x, center_y)
-	// write_table(tab_ke, ke_path)
+	create_vel_dist_table(dump, run_dir, zero_lvl, center_x, center_y)
 }
