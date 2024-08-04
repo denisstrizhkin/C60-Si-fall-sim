@@ -264,6 +264,65 @@ func velocity_table(dump Dump, zero_lvl, c_x, c_y float64) [][]string {
 	return tab_vel
 }
 
+func energy_distr(dump Dump, zero_lvl, c_x, c_y float64) [][]string {
+	tab_ke := make([][]string, len(dump.timesteps)+1)
+	ke := make([][]int, len(dump.timesteps))
+	var cyllinder_r float64 = 20
+	var cyllinder_h float64 = 10
+	var bin_width float64 = 0.025
+	var bin_start float64 = 0
+	var bin_end float64 = 2
+	bin_length := bin_end - bin_start
+	bin_count := int(bin_length / bin_width)
+
+	for i := range tab_ke {
+		tab_ke[i] = make([]string, bin_count+1)
+		if i != 0 {
+			tab_ke[i][0] = strconv.Itoa(dump.timesteps[i-1])
+			ke[i-1] = make([]int, len(tab_ke[i])-1)
+		}
+	}
+	tab_ke[0][0] = "timestep\\ke"
+	for i := range bin_count {
+		tab_ke[0][i+1] = strconv.FormatFloat(float64(i)*bin_width+bin_start+bin_width/2, 'f', FLOAT_PREC, 64)
+	}
+
+	for j, timestep := range dump.timesteps {
+		x := dump.extract("x", timestep)
+		y := dump.extract("y", timestep)
+		z := dump.extract("z", timestep)
+		kin_e := dump.extract("c_atom_ke", timestep)
+		for i := range x {
+			dx := x[i] - c_x
+			dy := y[i] - c_y
+			dz := z[i] - zero_lvl
+			m := dx*dx + dy*dy
+			if m <= cyllinder_r*cyllinder_r && math.Abs(dz) <= cyllinder_h {
+				cur_kin_e := kin_e[i]
+				if cur_kin_e > bin_end {
+					cur_kin_e = bin_end
+				}
+				if cur_kin_e < bin_start {
+					cur_kin_e = bin_start
+				}
+				index := int((cur_kin_e - bin_start) / bin_width)
+				if index == bin_count {
+					index--
+				}
+				ke[j][index]++
+			}
+		}
+	}
+
+	for i, row := range ke {
+		for j, cel := range row {
+			tab_ke[i+1][j+1] = strconv.Itoa(cel)
+		}
+	}
+
+	return tab_ke
+}
+
 func write_table(tab [][]string, path string) {
 	f, err := os.Create(path)
 	if err != nil {
@@ -305,4 +364,8 @@ func main() {
 	vel_path := run_dir + "/vel_distrib.txt"
 	tab_vel := velocity_table(dump, zero_lvl, center_x, center_y)
 	write_table(tab_vel, vel_path)
+
+	ke_path := run_dir + "/ke_distrib.txt"
+	tab_ke := energy_distr(dump, zero_lvl, center_x, center_y)
+	write_table(tab_ke, ke_path)
 }
