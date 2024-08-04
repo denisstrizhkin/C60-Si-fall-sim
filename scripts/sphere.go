@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"log"
 	"math"
 	"os"
@@ -14,23 +15,24 @@ const (
 )
 
 type Dump struct {
-	data      map[string]map[int][]float64
-	timesteps []int
+	data      [][][]float64
+	timesteps map[int]int
+	keys      map[string]int
+	path      string
 }
 
-func NewDump(path string) Dump {
-	file, err := os.Open(path)
+func NewDump(path string, max_timestep int) (dump Dump) {
+	data, err := os.ReadFile(path)
 	if err != nil {
-		log.Fatalln("reading dump file:", path, err)
+		log.Fatalf("couldn't read dump file: %s - %v", path, err)
 	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	dump := Dump{
-		data:      make(map[string]map[int][]float64),
-		timesteps: make([]int, 0),
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	dump = Dump{
+		data:      make([][][]float64, 0),
+		timesteps: make(map[int]int),
+		keys:      make(map[string]int),
+		path:      path,
 	}
-	keys := make([]string, 0)
 
 	is_read_atom_count := false
 	is_read_atoms := false
@@ -39,6 +41,7 @@ func NewDump(path string) Dump {
 	atom_count := -1
 	current_atom := -1
 	current_timestep := -1
+	current_timestep_i := -1
 	for scanner.Scan() {
 		if scanner.Text() == "ITEM: TIMESTEP" {
 			is_read_atoms = false
@@ -50,10 +53,11 @@ func NewDump(path string) Dump {
 		if is_read_timestep {
 			is_read_timestep = false
 			current_timestep = parse_int(scanner.Text())
-			dump.timesteps = append(dump.timesteps, current_timestep)
-			// if current_timestep == 500 {
-			// 	return dump
-			// }
+			if current_timestep > max_timestep {
+				return
+			}
+			current_timestep_i++
+			dump.timesteps[current_timestep] = current_timestep_i
 			log.Println("reading timestep:", current_timestep)
 			continue
 		}
@@ -71,15 +75,14 @@ func NewDump(path string) Dump {
 
 		if strings.Contains(scanner.Text(), "ITEM: ATOMS") {
 			is_read_atoms = true
-			if len(keys) == 0 {
-				for _, key := range strings.Split(scanner.Text(), " ")[2:] {
-					keys = append(keys, key)
-					dump.data[key] = make(map[int][]float64)
+			if len(dump.keys) == 0 {
+				for i, key := range strings.Split(scanner.Text(), " ")[2:] {
+					dump.keys[key] = i
+					dump.data = append(dump.data, make([][]float64, 0))
 				}
 			}
-
-			for _, val := range dump.data {
-				val[current_timestep] = make([]float64, atom_count)
+			for _, i := range dump.keys {
+				dump.data[i] = append(dump.data[i], make([]float64, atom_count))
 			}
 			continue
 		}
@@ -87,8 +90,8 @@ func NewDump(path string) Dump {
 		if is_read_atoms {
 			tokens := strings.Split(scanner.Text(), " ")
 			current_atom++
-			for i, key := range keys {
-				dump.data[key][current_timestep][current_atom] = parse_float(tokens[i])
+			for _, i := range dump.keys {
+				dump.data[i][current_timestep_i][current_atom] = parse_float(tokens[i])
 			}
 		}
 	}
@@ -97,11 +100,11 @@ func NewDump(path string) Dump {
 		log.Fatalln("reading dump file:", err)
 	}
 
-	return dump
+	return
 }
 
 func (d Dump) extract(field string, timestep int) []float64 {
-	return d.data[field][timestep]
+	return d.data[d.keys[field]][d.timesteps[timestep]]
 }
 
 func parse_float(s string) float64 {
@@ -155,7 +158,7 @@ func sphere_tables(dump Dump, zero_lvl, c_x, c_y float64) (tab_ek, tab_count [][
 	var R_stop float64 = 30
 	var R_d float64 = 5
 	R_count := int((R_stop-R_start)/R_d + 1)
-	for i, timestep := range dump.timesteps {
+	for timestep, i := range dump.timesteps {
 		tab_ek[i] = make([]float64, R_count)
 		tab_count[i] = make([]float64, R_count)
 		rows[i] = strconv.Itoa(timestep)
@@ -164,7 +167,7 @@ func sphere_tables(dump Dump, zero_lvl, c_x, c_y float64) (tab_ek, tab_count [][
 	for j := range R_count {
 		R := float64(j)*R_d + R_start
 		cols[j] = strconv.FormatFloat(R, 'f', FLOAT_PREC, 64)
-		for i, timestep := range dump.timesteps {
+		for timestep, i := range dump.timesteps {
 			x := dump.extract("x", timestep)
 			y := dump.extract("y", timestep)
 			z := dump.extract("z", timestep)
@@ -228,7 +231,7 @@ func velocity_table(dump Dump, zero_lvl, c_x, c_y float64) (tab [][]float64, row
 	var bin_end float64 = 180
 	bin_count := int((bin_end - bin_start) / bin_width)
 	cols = make([]string, bin_count)
-	for j, timestep := range dump.timesteps {
+	for timestep, j := range dump.timesteps {
 		rows[j] = strconv.Itoa(timestep)
 		x := dump.extract("x", timestep)
 		y := dump.extract("y", timestep)
@@ -271,7 +274,7 @@ func energy_distr(dump Dump, zero_lvl, c_x, c_y float64) (tab [][]float64, rows,
 	var bin_end float64 = 2
 	bin_count := int((bin_end - bin_start) / bin_width)
 	cols = make([]string, bin_count)
-	for j, timestep := range dump.timesteps {
+	for timestep, j := range dump.timesteps {
 		rows[j] = strconv.Itoa(timestep)
 		x := dump.extract("x", timestep)
 		y := dump.extract("y", timestep)
@@ -358,7 +361,7 @@ func main() {
 	dump_during := run_dir + "/dump.during"
 	log.Println("using run_dir:", run_dir)
 
-	dump := NewDump(dump_during)
+	dump := NewDump(dump_during, 5100)
 	zero_lvl := calc_zero_lvl(dump, 0)
 	center_x, center_y := calc_cluster_center(dump, 0)
 	log.Printf("zero_lvl: %f, center: (%f, %f)\n", zero_lvl, center_x, center_y)
