@@ -113,6 +113,9 @@ func NewDump(path string, max_timestep, threads int) (dump Dump) {
 	wg.Wait()
 	dump = dumps[0]
 	for i := 1; i < len(dumps); i++ {
+		for timestep, i := range dumps[i].timesteps {
+			dump.timesteps[timestep] = len(dump.data[0]) + i
+		}
 		for _, j := range dump.keys {
 			dump.data[j] = append(dump.data[j], dumps[i].data[j]...)
 		}
@@ -378,7 +381,8 @@ func main() {
 	dump_during := run_dir + "/dump.during"
 	log.Println("using run_dir:", run_dir)
 
-	dump := NewDump(dump_during, 5100, 1)
+	dump := NewDump(dump_during, 5100, 4)
+	log.Println("dump len: ", len(dump.data[0]))
 	zero_lvl := calc_zero_lvl(dump, 0)
 	center_x, center_y := calc_cluster_center(dump, 0)
 	log.Printf("zero_lvl: %f, center: (%f, %f)\n", zero_lvl, center_x, center_y)
