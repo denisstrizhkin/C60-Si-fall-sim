@@ -21,21 +21,42 @@ type Dump struct {
 	path      string
 }
 
-func readAllLines(path string) []string {
-	data, err := os.ReadFile(path)
+func readAllLines(path string, max_timestep int) (lines []string, timesteps []int) {
+	file, err := os.Open(path)
 	if err != nil {
-		log.Fatalf("reading all lines in file: %s - %v", path, err)
+		log.Fatalf("opening dump file: %s - %v", path, err)
 	}
-	return strings.Split(string(data), "\n")
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	lines = make([]string, 0)
+	timesteps = make([]int, 0)
+	for i := 0; scanner.Scan(); i++ {
+		lines = append(lines, scanner.Text())
+		if scanner.Text() == "ITEM: TIMESTEP" {
+			if !scanner.Scan() {
+				break
+			}
+			lines = append(lines, scanner.Text())
+			timestep := parse_int(scanner.Text())
+			timesteps = append(timesteps, i)
+			if timestep > max_timestep {
+				return
+			}
+			i++
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		log.Fatalf("reading dump file: %s - %v", path, err)
+	}
+	timesteps = append(timesteps, len(lines))
+	return
 }
 
-func dumpFromLines(wg *sync.WaitGroup, resultChan chan<- Dump, lines []string) {
+func dumpFromLines(wg *sync.WaitGroup, dump *Dump, lines []string) {
 	defer wg.Done()
-	dump := Dump{
-		data:      make([][][]float64, 0),
-		timesteps: make(map[int]int),
-		keys:      make(map[string]int),
-	}
+	dump.data = make([][][]float64, 0)
+	dump.timesteps = make(map[int]int)
+	dump.keys = make(map[string]int)
 	atom_count := -1
 	current_timestep := -1
 	current_timestep_i := -1
@@ -68,45 +89,32 @@ func dumpFromLines(wg *sync.WaitGroup, resultChan chan<- Dump, lines []string) {
 			}
 		}
 	}
-	resultChan <- dump
 }
 
 func NewDump(path string, max_timestep, threads int) (dump Dump) {
-	lines := readAllLines(path)
-	timestep_start := make([]int, 0)
-	timestep := -1
-	for i, line := range lines {
-		if line == "ITEM: TIMESTEP" {
-			timestep_start = append(timestep_start, i)
-			i++
-			timestep = parse_int(lines[i])
-			if timestep > max_timestep {
-				break
-			}
-		}
-	}
-	if timestep < max_timestep {
-		timestep_start = append(timestep_start, len(lines))
-	}
-	var wg sync.WaitGroup
-	resultChan := make(chan Dump, threads)
-	shift := (len(timestep_start) - 1) / threads
+	lines, timesteps := readAllLines(path, max_timestep)
+	finalI := len(timesteps) - 1
+	chunkSize := (finalI) / threads
+	dumps := make([]Dump, threads)
+	wg := &sync.WaitGroup{}
 	for i := range threads {
-		start := i * shift
-		end := start + shift
-		if end < len(timestep_start)-1 && end+shift > len(timestep_start)-1 {
-			end = len(timestep_start) - 1
+		start := i * chunkSize
+		end := start + chunkSize
+		if end < finalI && end+chunkSize > finalI {
+			end = finalI
 		}
-		log.Println(start, end)
+		log.Printf(
+			"processing chunk: [%d, %d] - [%d, %d]\n",
+			start, end, timesteps[start], timesteps[end],
+		)
 		wg.Add(1)
-		go dumpFromLines(&wg, resultChan, lines[timestep_start[start]:timestep_start[end]])
+		go dumpFromLines(wg, &dumps[i], lines[timesteps[start]:timesteps[end]])
 	}
 	wg.Wait()
-	close(resultChan)
-	dump = <-resultChan
-	for d := range resultChan {
-		for _, i := range dump.keys {
-			dump.data[i] = append(dump.data[i], d.data[i]...)
+	dump = dumps[0]
+	for i := 1; i < len(dumps); i++ {
+		for _, j := range dump.keys {
+			dump.data[j] = append(dump.data[j], dumps[i].data[j]...)
 		}
 	}
 	return
