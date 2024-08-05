@@ -2,12 +2,12 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"log"
 	"math"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 const (
@@ -21,62 +21,37 @@ type Dump struct {
 	path      string
 }
 
-func NewDump(path string, max_timestep int) (dump Dump) {
+func readAllLines(path string) []string {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		log.Fatalf("couldn't read dump file: %s - %v", path, err)
+		log.Fatalf("reading all lines in file: %s - %v", path, err)
 	}
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	dump = Dump{
+	return strings.Split(string(data), "\n")
+}
+
+func dumpFromLines(wg *sync.WaitGroup, resultChan chan<- Dump, lines []string) {
+	defer wg.Done()
+	dump := Dump{
 		data:      make([][][]float64, 0),
 		timesteps: make(map[int]int),
 		keys:      make(map[string]int),
-		path:      path,
 	}
-
-	is_read_atom_count := false
-	is_read_atoms := false
-	is_read_timestep := false
-
 	atom_count := -1
-	current_atom := -1
 	current_timestep := -1
 	current_timestep_i := -1
-	for scanner.Scan() {
-		if scanner.Text() == "ITEM: TIMESTEP" {
-			is_read_atoms = false
-			current_atom = -1
-			is_read_timestep = true
-			continue
-		}
-
-		if is_read_timestep {
-			is_read_timestep = false
-			current_timestep = parse_int(scanner.Text())
-			if current_timestep > max_timestep {
-				return
-			}
+	for i := 0; i < len(lines); i++ {
+		if lines[i] == "ITEM: TIMESTEP" {
+			i++
+			current_timestep = parse_int(lines[i])
 			current_timestep_i++
 			dump.timesteps[current_timestep] = current_timestep_i
 			log.Println("reading timestep:", current_timestep)
-			continue
-		}
-
-		if scanner.Text() == "ITEM: NUMBER OF ATOMS" {
-			is_read_atom_count = true
-			continue
-		}
-
-		if is_read_atom_count {
-			atom_count = parse_int(scanner.Text())
-			is_read_atom_count = false
-			continue
-		}
-
-		if strings.Contains(scanner.Text(), "ITEM: ATOMS") {
-			is_read_atoms = true
+		} else if lines[i] == "ITEM: NUMBER OF ATOMS" {
+			i++
+			atom_count = parse_int(lines[i])
+		} else if strings.Contains(lines[i], "ITEM: ATOMS") {
 			if len(dump.keys) == 0 {
-				for i, key := range strings.Split(scanner.Text(), " ")[2:] {
+				for i, key := range strings.Split(lines[i], " ")[2:] {
 					dump.keys[key] = i
 					dump.data = append(dump.data, make([][]float64, 0))
 				}
@@ -84,22 +59,56 @@ func NewDump(path string, max_timestep int) (dump Dump) {
 			for _, i := range dump.keys {
 				dump.data[i] = append(dump.data[i], make([]float64, atom_count))
 			}
-			continue
-		}
-
-		if is_read_atoms {
-			tokens := strings.Split(scanner.Text(), " ")
-			current_atom++
-			for _, i := range dump.keys {
-				dump.data[i][current_timestep_i][current_atom] = parse_float(tokens[i])
+			i++
+			for j := range atom_count {
+				tokens := strings.Split(lines[i+j], " ")
+				for _, i := range dump.keys {
+					dump.data[i][current_timestep_i][j] = parse_float(tokens[i])
+				}
 			}
 		}
 	}
+	resultChan <- dump
+}
 
-	if err := scanner.Err(); err != nil {
-		log.Fatalln("reading dump file:", err)
+func NewDump(path string, max_timestep, threads int) (dump Dump) {
+	lines := readAllLines(path)
+	timestep_start := make([]int, 0)
+	timestep := -1
+	for i, line := range lines {
+		if line == "ITEM: TIMESTEP" {
+			timestep_start = append(timestep_start, i)
+			i++
+			timestep = parse_int(lines[i])
+			if timestep > max_timestep {
+				break
+			}
+		}
 	}
-
+	if timestep < max_timestep {
+		timestep_start = append(timestep_start, len(lines))
+	}
+	var wg sync.WaitGroup
+	resultChan := make(chan Dump, threads)
+	shift := (len(timestep_start) - 1) / threads
+	for i := range threads {
+		start := i * shift
+		end := start + shift
+		if end < len(timestep_start)-1 && end+shift > len(timestep_start)-1 {
+			end = len(timestep_start) - 1
+		}
+		log.Println(start, end)
+		wg.Add(1)
+		go dumpFromLines(&wg, resultChan, lines[timestep_start[start]:timestep_start[end]])
+	}
+	wg.Wait()
+	close(resultChan)
+	dump = <-resultChan
+	for d := range resultChan {
+		for _, i := range dump.keys {
+			dump.data[i] = append(dump.data[i], d.data[i]...)
+		}
+	}
 	return
 }
 
@@ -361,7 +370,7 @@ func main() {
 	dump_during := run_dir + "/dump.during"
 	log.Println("using run_dir:", run_dir)
 
-	dump := NewDump(dump_during, 5100)
+	dump := NewDump(dump_during, 5100, 1)
 	zero_lvl := calc_zero_lvl(dump, 0)
 	center_x, center_y := calc_cluster_center(dump, 0)
 	log.Printf("zero_lvl: %f, center: (%f, %f)\n", zero_lvl, center_x, center_y)
