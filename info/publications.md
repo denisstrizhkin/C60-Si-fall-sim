@@ -23,3 +23,4 @@
 ## 2024
 
 1. **K.P. Karasev, D.A. Strizhkin, A.I. Titov, P.A. Karaseov**, “Simulation of Silicon Irradiation with C60 Ions: Unveiling the Role of the Interaction Potential”, J. Surf. Investig., 2024, v.18, p.433 [Link](https://link.springer.com/article/10.1134/S1027451024020319)
+2. **К.П. Карасев, Д.А. Стрижкин, А.И. Титов, П.А. Карасев**, “Моделирование облучения кремния ионами C60 и роль потенциала взаимодействия”, Поверхность. Рентгеновские, синхротронные и нейтронные исследования, 2024, №4, c.68  [Link](http://www.issp.ac.ru/journal/surface/2024/4-9.pdf)
