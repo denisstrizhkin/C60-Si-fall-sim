@@ -12,8 +12,11 @@ balance 1.0 shift xyz 10 1.0
 variable bottom_fixed_top equal 'zlo + 0.5 * v_lattice'
 variable thermostat_floor_top equal 'v_bottom_fixed_top + v_lattice'
 
+variable cluster_count equal '60' # FIX
+variable cluster_amass equal '12.011' # FIX
+
 variable C60_z equal 'v_C60_z_offset + v_zero_lvl'
-variable C60_vel equal '-sqrt(v_energy * 1000) * 5.174 '
+variable C60_vel equal '-sqrt(v_energy * 1000 / v_cluster_amass / v_cluster_count) * 138.842'
 
 ### variables block ###
 variable cos_1 equal '0.9902680687415704'
@@ -21,29 +24,24 @@ variable cos_2 equal '0.13917310096006547'
 variable C60_vel_z equal 'v_C60_vel * v_cos_1'
 variable C60_vel_x equal '-v_C60_vel * v_cos_2'
 variable block_zlo equal 'v_zero_lvl + 5.9 * v_lattice'
-variable block_zhi equal 'v_block_zlo + 15.2 * v_lattice'
+variable block_zhi equal 'v_block_zlo + 60.2 * v_lattice'
 
 ### regions ###
 lattice diamond ${lattice} orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
 
-region nve1 block EDGE EDGE EDGE EDGE EDGE ${bottom_fixed_top} side out units box
-region nve2 block EDGE EDGE EDGE $(ylo + v_lattice * 1) $(v_zero_lvl + v_lattice) $(v_block_zhi + v_lattice) side out units box
-region nve3 block EDGE EDGE EDGE $(yhi - v_lattice * 1) $(v_block_zlo) $(v_block_zhi) side out units box
+region nve1 block EDGE EDGE EDGE                   EDGE                   EDGE                      ${bottom_fixed_top}        side out units box
+region nve2 block EDGE EDGE EDGE                   $(ylo + v_lattice * 1) $(v_block_zlo)            $(v_block_zhi)             side out units box
+region nve3 block EDGE EDGE $(yhi - v_lattice * 1) EDGE                   $(v_block_zlo)            $(v_block_zhi)             side out units box
 region nve intersect 3 nve1 nve2 nve3
 
 region block block EDGE EDGE EDGE EDGE $(v_block_zlo) $(v_block_zhi) units box
 
-region thermostat1 block EDGE EDGE EDGE EDGE ${bottom_fixed_top} ${thermostat_floor_top} units box
-region thermostat2 block EDGE EDGE $(18 * v_lattice) EDGE $(v_block_zlo) $(v_block_zhi) units box
+region thermostat1 block EDGE EDGE EDGE              EDGE ${bottom_fixed_top} ${thermostat_floor_top} units box
+region thermostat2 block EDGE EDGE $(18 * v_lattice) EDGE $(v_block_zlo)      $(v_block_zhi)          units box
 region thermostat union 2 thermostat1 thermostat2
 
-region dt_reset block EDGE EDGE EDGE EDGE $(v_zero_lvl - 50) $(v_zero_lvl + 15) units box
-
-region C60_box block EDGE EDGE EDGE EDGE $(v_C60_z - 10) EDGE units box
-
-region clusters block EDGE EDGE EDGE EDGE 0 INF units box
-
-write_restart ${vacs_restart_file}
+region dt_reset block EDGE EDGE EDGE EDGE EDGE EDGE units box
+region estop    block EDGE EDGE EDGE EDGE EDGE                $(v_zero_lvl + 0.5)     units box
 
 
 ### potentials ###
@@ -66,24 +64,18 @@ neigh_modify one 4000
 
 
 ### displace atoms ###
-# displace_atoms all move ${C60_x} ${C60_y} 0 units box
-displace_atoms all move ${C60_x} 0 0 units box
-
-
-### C60 molecule ###
-molecule C60 ${mol_file}
-# create_atoms 1 single 0 0 ${C60_z} mol C60 1 units box
-create_atoms 1 single 0 ${C60_y} ${C60_z} mol C60 1 units box
-group C60 region C60_box
-
+group Si type 1
+displace_atoms all move ${crystal_x} ${crystal_y} 0 units box
 
 ### groups ###
 group C type 2
-group Si type 1
-
 group block region block
-group no_block subtract all block
 
+### C60 molecule ###
+read_data ../input_files/data.Ar39_${cluster_count} group C60 add append shift ${C60_x} ${C60_y} ${C60_z}
+
+
+### groups ###
 group nve dynamic all region nve every 1
 group thermostat dynamic all region thermostat every 1
 
@@ -91,8 +83,6 @@ group dt_reset dynamic all region dt_reset every 10
 
 
 ### computes ###
-
-# compute ke per atom
 compute atom_ke all ke/atom
 
 # voronoi
@@ -102,7 +92,7 @@ variable vacancy_id atom "v_is_vacancy*id"
 compute vacancies Si reduce sum v_is_vacancy
 
 # sputtered atoms
-variable is_sputtered atom "z>v_zero_lvl"
+variable is_sputtered atom "z>(v_zero_lvl - 5 * v_lattice)"
 compute sputter_all all reduce sum v_is_sputtered
 compute sputter_si  Si  reduce sum v_is_sputtered
 compute sputter_c   C   reduce sum v_is_sputtered
@@ -119,51 +109,32 @@ thermo_style custom step pe ke etotal temp c_vacancies dt time c_sputter_all c_s
 fix balance all balance 20 1.0 shift xyz 10 1.0
 fix nve nve nve
 fix tbath thermostat temp/berendsen ${temperature} ${temperature} 0.001
-fix estop all electron/stopping 10.0 ${elstop_table} minneigh 30
+fix estop all electron/stopping 10.0 ${elstop_table} region estop
 fix dt dt_reset dt/reset 1 $(v_step/10) $(v_step) 0.1
 
 
 ### dumps ###
-dump during all custom 25 ${dump_during} id type x y z c_atom_ke
+dump during all custom 20 ${dump_during} id type x y z vx vy vz c_atom_ke
 
 
 ### run simulation ###
 velocity C60 set NULL ${C60_vel_x} ${C60_vel_z} sum yes units box
 
-#fix temp_time all print 10 "$(time) $(temp)" file {run_dir}/temp_time.txt screen no
-#fix penrg_time all print 10 "$(time) $(pe)" file {run_dir}/penrg_time.txt screen no
-
 label run_a
 run 100
+if "$(time) > 0.7" then "delete_atoms group block"
 if "$(time) < 1" then "jump SELF run_a"
 
 unfix estop
 unfix dt
 group dt_reset delete
-
 thermo 20
 run $(v_run_time - 1000)
  
-group clusters variable is_sputtered
-group clusters_nb subtract clusters block
-
-compute clusters all cluster/atom 3
-compute mass clusters property/atom mass
-dump clusters clusters custom 1 ${dump_cluster} id x y z vx vy vz type c_mass c_clusters c_atom_ke
+dump final all custom 1 ${dump_final} id x y z vx vy vz type c_atom_ke
 run 0
-undump clusters
-uncompute clusters
-uncompute mass
 
-compute clusters no_block cluster/atom 3
-compute mass clusters_nb property/atom mass
-dump clusters clusters_nb custom 1 ${dump_cluster_nb} id x y z vx vy vz type c_mass c_clusters c_atom_ke
-run 0
-undump clusters
-
-dump final all custom 1 ${dump_final} id x y z vx vy vz type c_clusters c_atom_ke
-run 0
-undump final
+write_data ${write_file}
 
 # unfix tbath
 # fix tbath nve temp/berendsen ${temperature} ${temperature} 0.001
@@ -172,8 +143,3 @@ undump final
 # unfix tbath
 # fix tbath thermostat temp/berendsen ${temperature} ${temperature} 0.001
 # run 2000
-
-group vac variable is_vacancy static
-write_dump vac custom ${dump_crater_id} id
-
-write_data ${write_file}
