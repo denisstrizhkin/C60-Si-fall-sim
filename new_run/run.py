@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import logging
+import sys
 import numpy as np
 from pathlib import Path
 import argparse
@@ -8,7 +8,6 @@ import tempfile
 import json
 import shutil
 import operator
-from itertools import chain
 
 import lammps_util
 from lammps_util import Dump, Atom, Cluster
@@ -165,6 +164,9 @@ C60_X: float = 0
 C60_Y: float = 0
 C60_WIDTH: int = 20
 
+CRYSTAL_X: float = 0
+CRYSTAL_Y: float = 0
+
 IS_ALL_DUMP: bool = True
 ALL_DUMP_INTERVAL: int = 20
 
@@ -320,16 +322,16 @@ def get_carbon(dump_final: Dump, carbon_sputtered: set[int]) -> list[Atom]:
 
 def get_carbon_hist(carbon: list[Atom], zero_lvl: float) -> np.ndarray:
     z_coords = np.fromiter(map(operator.attrgetter("z"), carbon), float)
+    if len(z_coords) == 0:
+        return np.asarray([[-0.5, 0.0], [0.5, 0.0]])
     z_coords = np.around(z_coords - zero_lvl, 1)
-
-    right = int(np.ceil(z_coords.max(initial=float("-inf"))))
-    left = int(np.floor(z_coords.min(initial=float("+inf"))))
+    right = int(np.ceil(z_coords.max())) + 1
+    left = int(np.floor(z_coords.min())) - 1
     hist, bins = np.histogram(z_coords, bins=(right - left), range=(left, right))
     length = len(hist)
     hist = np.concatenate(
         ((bins[1:] - 0.5).reshape(length, 1), hist.reshape(length, 1)), axis=1
     )
-
     return hist
 
 
@@ -368,10 +370,10 @@ def main() -> None:
             return coord + (np.random.rand() * 2 - 1) * lattice * C60_WIDTH
 
         if "C60_x" in INPUT_VARS and run_i == int(INPUT_VARS["run_i"]):
-            fu_x = float(INPUT_VARS["C60_x"])
+            fu_x = 0
+            # fu_x = float(INPUT_VARS["C60_x"])
         else:
             fu_x = rnd_coord(C60_X)
-
         if "C60_y" in INPUT_VARS and run_i == int(INPUT_VARS["run_i"]):
             fu_y = float(INPUT_VARS["C60_y"])
         else:
@@ -380,6 +382,16 @@ def main() -> None:
             xhi = 48.49525382424502
             delta = xhi - xlo
             fu_y = (np.random.rand() * delta) + xlo
+        if "crystal_x" in INPUT_VARS and run_i == int(INPUT_VARS["run_i"]):
+            crystal_x = float(INPUT_VARS["crystal_x"])
+        else:
+            crystal_x = 0
+            crystal_x = rnd_coord(CRYSTAL_X)
+        if "crystal_y" in INPUT_VARS and run_i == int(INPUT_VARS["run_i"]):
+            crystal_y = float(INPUT_VARS["crystal_y"])
+        else:
+            crystal_y = 0
+            # crystal_y = rnd_coord(CRYSTAL_Y)
 
         dump_cluster_path = run_dir / "dump.cluster"
         dump_final_path = run_dir / "dump.final"
@@ -404,6 +416,8 @@ def main() -> None:
             "C60_z_offset": str(c60_z_offset),
             "C60_y": str(fu_y),
             "C60_x": str(fu_x),
+            "crystal_x": str(crystal_x),
+            "crystal_y": str(crystal_y),
             "step": str(step),
             "temperature": str(temperature),
             "energy": str(energy),
@@ -429,7 +443,7 @@ def main() -> None:
             )
             != 0
         ):
-            continue
+            sys.exit(1)
 
         dump_final = Dump(dump_final_path)
         lammps_util.create_clusters_dump(
@@ -468,10 +482,16 @@ def main() -> None:
             dump_final_no_cluster, run_dir, lattice, zero_lvl, C60_WIDTH
         )
 
-        if IS_MULTIFALL == False:
-            lammps_util.create_crater_dump(run_dir)
+        if not IS_MULTIFALL:
+            lammps_util.create_crater_dump(
+                dump_crater_path,
+                dump_final,
+                input_file,
+                offset_x=crystal_x,
+                offset_y=crystal_y,
+            )
             dump_crater = Dump(dump_crater_path)
-            crater_info = lammps_util.get_crater_info(dump_crater, sim_n, zero_lvl)
+            crater_info = lammps_util.get_crater_info(dump_crater, run_num, zero_lvl)
             lammps_util.save_table(CRATER_TABLE, crater_info, mode="a")
 
         lammps_util.save_table(CLUSTERS_TABLE, clusters_table, mode="a")
