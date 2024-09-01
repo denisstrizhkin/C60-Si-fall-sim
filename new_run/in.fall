@@ -122,7 +122,7 @@ velocity C60 set NULL ${C60_vel_x} ${C60_vel_z} sum yes units box
 
 label run_a
 run 100
-if "$(time) > 0.7" then "delete_atoms group block"
+if "$(time) > 0.7" then "delete_atoms group block compress no"
 if "$(time) < 1" then "jump SELF run_a"
 
 unfix estop

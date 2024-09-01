@@ -370,18 +370,19 @@ def main() -> None:
             return coord + (np.random.rand() * 2 - 1) * lattice * C60_WIDTH
 
         if "C60_x" in INPUT_VARS and run_i == int(INPUT_VARS["run_i"]):
-            fu_x = 0
-            # fu_x = float(INPUT_VARS["C60_x"])
+            fu_x = float(INPUT_VARS["C60_x"])
         else:
-            fu_x = rnd_coord(C60_X)
+            fu_x = 0
+            # fu_x = rnd_coord(C60_X)
         if "C60_y" in INPUT_VARS and run_i == int(INPUT_VARS["run_i"]):
             fu_y = float(INPUT_VARS["C60_y"])
         else:
             # fu_y = rnd_coord(C60_Y)
-            xlo = 59.56073644453781
-            xhi = 48.49525382424502
+            xlo = 41.8583296063435
+            xhi = 63.75459165297608
             delta = xhi - xlo
             fu_y = (np.random.rand() * delta) + xlo
+            fu_y = xlo
         if "crystal_x" in INPUT_VARS and run_i == int(INPUT_VARS["run_i"]):
             crystal_x = float(INPUT_VARS["crystal_x"])
         else:
@@ -470,23 +471,30 @@ def main() -> None:
         lammps_util.dump_delete_atoms(
             dump_final_path, dump_final_no_cluster_path, ids_to_delete
         )
+        dump_final_no_cluster = Dump(dump_final_no_cluster_path)
+        sigma = lammps_util.calc_surface(
+            dump_final_no_cluster, run_dir, lattice, zero_lvl, C60_WIDTH
+        )
         if IS_MULTIFALL:
             write_file_no_clusters = TMP / "tmp_no_cluster.input.data"
             lammps_util.input_delete_atoms(
                 write_file, write_file_no_clusters, ids_to_delete
             )
             input_file = write_file_no_clusters
-
-        dump_final_no_cluster = Dump(dump_final_no_cluster_path)
-        sigma = lammps_util.calc_surface(
-            dump_final_no_cluster, run_dir, lattice, zero_lvl, C60_WIDTH
-        )
-
-        if not IS_MULTIFALL:
+        else:
+            dump_init_path = input_file.parent / "dump.input"
+            lammps_util.create_dump_from_input(input_file, dump_init_path)
+            dump_init = Dump(dump_init_path)
+            input_file_no_block = input_file.with_stem(input_file.stem + "_no_block")
+            lammps_util.input_delete_atoms(
+                input_file,
+                input_file_no_block,
+                dump_init["id"][np.where(dump_init["z"] > zero_lvl + 10)],
+            )
             lammps_util.create_crater_dump(
                 dump_crater_path,
-                dump_final,
-                input_file,
+                dump_final_no_cluster,
+                input_file_no_block,
                 offset_x=crystal_x,
                 offset_y=crystal_y,
             )
