@@ -6,7 +6,6 @@ atom_style atomic
 atom_modify map yes
 
 read_data ${input_file}
-balance 1.0 shift xyz 10 1.0
 
 ### variables ###
 variable bottom_fixed_top equal 'zlo + 0.5 * v_lattice'
@@ -72,7 +71,8 @@ group C type 2
 group block region block
 
 ### C60 molecule ###
-read_data ../input_files/data.Ar39_${cluster_count} group C60 add append shift ${C60_x} ${C60_y} ${C60_z}
+read_data ${mol_file} group C60 add append shift ${C60_x} ${C60_y} ${C60_z}
+balance 1.0 shift xyz 10 1.0
 
 
 ### groups ###
