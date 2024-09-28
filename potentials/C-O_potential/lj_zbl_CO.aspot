@@ -8,5 +8,5 @@ C-O : spline(
                     as.zbl 6 8 
               >=0.5 
                     exp_spline 
-              >=3.4 
+              >=1.1 
                     as.lj 0.0176 3.99 )
