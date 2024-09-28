@@ -1,0 +1,12 @@
+[Tabulation]
+target :  LAMMPS
+cutoff : 6.8
+nr : 3000
+
+[Pair]
+Ar-Ar : spline(
+                    as.zbl 6 6 
+              >=0.5 
+                    exp_spline 
+              >=3.4 
+                    as.lj 0.01035 3.4 )
