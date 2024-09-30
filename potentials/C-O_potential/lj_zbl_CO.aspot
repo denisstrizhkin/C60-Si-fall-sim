@@ -9,4 +9,4 @@ C-O : spline(
               >=0.5 
                     exp_spline 
               >=1.1 
-                    as.lj 1.00556 3.99 )
+                    as.lj 3.99 1.00556 )
