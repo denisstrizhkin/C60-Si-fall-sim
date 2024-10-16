@@ -6,14 +6,25 @@ from pathlib import Path
 import argparse
 import tempfile
 import json
-import shutil
 import operator
+from typing import Optional
 
 import lammps_util
 from lammps_util import Dump, Atom, Cluster
 
+from lammps import lammps
+from mpi4py import MPI
+from lammps_mpi4py import LammpsMPI
 
-def parse_args():
+from pydantic import BaseModel, Field
+
+SI_ATOM_TYPE: int = 1
+C_ATOM_TYPE: int = 2
+IS_MULTIFALL: bool = False
+C60_WIDTH: int = 20
+
+
+def parse_args() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run Si bombardment with C60 simulation."
     )
@@ -61,15 +72,6 @@ def parse_args():
         default=2,
         type=int,
         help="Set number of OpenMP threads. (if set to 0 use GPU)",
-    )
-
-    parser.add_argument(
-        "--mpi-cores",
-        action="store",
-        required=False,
-        default=4,
-        type=int,
-        help="Set number of MPI cores.",
     )
 
     parser.add_argument(
@@ -132,109 +134,45 @@ def parse_args():
     return parser.parse_args()
 
 
-ARGS = parse_args()
+class RunVars(BaseModel):
+    run_i: int = Field(default=0)
+    lattice: float = Field(default=5.43)
+    C60_z_offset: float = Field(default=150)
+    C60_y: float = Field(default=0)
+    C60_x: float = Field(default=0)
+    crystal_x: float = Field(default=0)
+    crystal_y: float = Field(default=0)
+    step: float = Field(default=1e-3)
+    temperature: float
+    energy: float
+    zero_lvl: float
+    run_time: int
 
-OUT_DIR: Path = Path(ARGS.results_dir)
-if not OUT_DIR.exists():
-    OUT_DIR.mkdir()
+    input_file: Path
+    output_file: Path
+    dump_final: Path
+    dump_during: Path
+    energy_file: Optional[Path] = None
 
-lammps_util.setup_root_logger(OUT_DIR / "run.log")
+    cluster_file: Path
+    elstop_table: Path
+    graphene_data: Optional[str] = None
 
-INPUT_VARS: dict[str, str] = {}
-if ARGS.input_vars is not None:
-    f_path = Path(ARGS.input_vars)
-    with open(f_path, mode="r") as f:
-        INPUT_VARS = json.load(f)
 
-INPUT_FILE: Path = Path(ARGS.input_file)
-# GRAPHENE_FILE: Path = Path(ARGS.graphene_file)
-GRAPHENE_FILE = None
-MOL_FILE: Path = Path(ARGS.mol_file)
-ELSTOP_TABLE: Path = Path(ARGS.estop_table)
-
-SCRIPT_DIR: Path = Path(ARGS.script_dir)
-
-OMP_THREADS: int = ARGS.omp_threads
-MPI_CORES: int = ARGS.mpi_cores
-
-N_RUNS: int = ARGS.runs
-IS_MULTIFALL: bool = False
-
-C60_X: float = 0
-C60_Y: float = 0
-C60_WIDTH: int = 20
-
-CRYSTAL_X: float = 0
-CRYSTAL_Y: float = 0
-
-IS_ALL_DUMP: bool = True
-ALL_DUMP_INTERVAL: int = 20
-
-TMP: Path = Path(tempfile.gettempdir()) / OUT_DIR.name
-if not TMP.exists():
-    TMP.mkdir()
-
-SI_ATOM_TYPE: int = 1
-C_ATOM_TYPE: int = 2
-
-if "run_i" not in INPUT_VARS:
-    INPUT_VARS["run_i"] = str(0)
-
-if "zero_lvl" not in INPUT_VARS:
-    # INPUT_VARS["zero_lvl"] = str(
-    #     lammps_util.calc_zero_lvl(INPUT_FILE, SCRIPT_DIR / "in.zero_lvl")
-    # )
-    INPUT_VARS["zero_lvl"] = str(82.7813)
-
-if "temperature" not in INPUT_VARS:
-    INPUT_VARS["temperature"] = str(ARGS.temperature)
-
-if "energy" not in INPUT_VARS:
-    INPUT_VARS["energy"] = str(ARGS.energy)
-
-if "run_time" not in INPUT_VARS:
-    energy = float(INPUT_VARS["energy"])
-    if ARGS.run_time is not None:
-        run_time = ARGS.run_time
-    elif energy < 8_000:
-        run_time = 10_000
-    else:
-        run_time = int(energy * (5 / 4))
-    INPUT_VARS["run_time"] = str(run_time)
-
-if "C60_z_offset" not in INPUT_VARS:
-    INPUT_VARS["C60_z_offset"] = str(150)
-
-if "step" not in INPUT_VARS:
-    INPUT_VARS["step"] = str(1e-3)
-
-if "lattice" not in INPUT_VARS:
-    INPUT_VARS["lattice"] = str(5.43)
-
-CLUSTERS_TABLE: Path = OUT_DIR / "clusters_table.txt"
-SPUTTER_COUNT_TABLE = OUT_DIR / "sputter_count_table.txt"
-RIM_TABLE: Path = OUT_DIR / "rim_table.txt"
-CARBON_TABLE: Path = OUT_DIR / "carbon_table.txt"
-CRATER_TABLE: Path = OUT_DIR / "crater_table.txt"
-CARBON_DIST: Path = OUT_DIR / "carbon_dist.txt"
-SURFACE_TABLE: Path = OUT_DIR / "surface_table.txt"
-COORD_NUM_TABLE: Path = OUT_DIR / "coord_num_table.txt"
+class Tables(BaseModel):
+    clusters: Path
+    sputter_count: Path
+    carbon: Path
+    carbon_dist: Path
+    crater: Path
+    rim: Path
+    surface: Path
+    coord_num: Path
 
 
 def write_header(header_str, table_path):
     with open(table_path, "w", encoding="utf-8") as f:
         f.write("# " + header_str + "\n")
-
-
-if INPUT_VARS["run_i"] == str(0):
-    write_header("sim_num N_Si N_C mass Px Py Pz Ek angle", CLUSTERS_TABLE)
-    write_header("sim_num N r_mean r_max z_mean z_max", RIM_TABLE)
-    write_header("sim_num N r_mean r_max", CARBON_TABLE)
-    write_header("sim_num N V S z_mean z_min", CRATER_TABLE)
-    write_header("z count", CARBON_DIST)
-    write_header("sim_num sigma", SURFACE_TABLE)
-    write_header("sim_num N_Si N_C N_Sum", SPUTTER_COUNT_TABLE)
-    # write_header("sim_num id Si C Sum", COORD_NUM_TABLE)
 
 
 def get_cluster_dict(
@@ -347,20 +285,68 @@ def get_carbon_info(carbon, fu_x, fu_y, sim_num):
     return np.array([[sim_num, len(carbon), r.mean(), r.max()]])
 
 
-def main() -> None:
-    lattice = float(INPUT_VARS["lattice"])
-    zero_lvl = float(INPUT_VARS["zero_lvl"])
-    c60_z_offset = float(INPUT_VARS["C60_z_offset"])
+def process_args() -> tuple[RunVars, Path, Path, int]:
+    args = parse_args()
 
-    energy = float(INPUT_VARS["energy"])
-    run_time = int(INPUT_VARS["run_time"])
-    step = float(INPUT_VARS["step"])
-    temperature = float(INPUT_VARS["temperature"])
+    out_dir: Path = Path(args.results_dir)
+    if not out_dir.exists():
+        out_dir.mkdir()
 
-    input_file: Path = INPUT_FILE
-    run_i = int(INPUT_VARS["run_i"])
+    tmp_dir: Path = out_dir / "tmp"
+    if not tmp_dir.exists():
+        tmp_dir.mkdir()
 
-    while run_i < N_RUNS:
+    runs: int = args.runs
+
+    lammps_util.setup_root_logger(out_dir / "run.log")
+
+    run_vars: RunVars
+    if args.input_vars is not None:
+        f_path = Path(args.input_vars)
+        with open(f_path, mode="r") as f:
+            json_data = json.load(f)
+            run_vars = RunVars.model_validate_json(json_data)
+    else:
+        run_vars = RunVars(
+            input_file=Path(args.input_file),
+            mol_file=Path(args.mol_file),
+            estop_table=Path(args.estop_table),
+            zero_lvl=82.7813,
+            temperature=args.temperature,
+            energy=args.energy,
+        )
+
+    return run_vars, out_dir, tmp_dir, runs
+
+
+def setup_tables(run_vars: RunVars, out_dir: Path) -> Tables:
+    tables = Tables(
+        clusters=out_dir / "clusters_table.txt",
+        sputter_count=out_dir / "sputter_count_table.txt",
+        carbon=out_dir / "carbon_table.txt",
+        carbon_dist=out_dir / "carbon_dist.txt",
+        crater=out_dir / "crater_table.txt",
+        rim=out_dir / "rim_table.txt",
+        surface=out_dir / "surface_table.txt",
+        coord_num=out_dir / "coord_num_table.txt",
+    )
+
+    if run_vars.run_i == 0:
+        write_header("sim_num N_Si N_C mass Px Py Pz Ek angle", tables.clusters)
+        write_header("sim_num N r_mean r_max", tables.carbon)
+        write_header("z count", tables.carbon_dist)
+        write_header("sim_num N V S z_mean z_min", tables.crater)
+        write_header("sim_num N r_mean r_max z_mean z_max", tables.rim)
+        write_header("sim_num sigma", tables.surface)
+        write_header("sim_num N_Si N_C N_Sum", tables.coord_num)
+
+    return tables
+
+
+def main(lmp: LammpsMPI) -> None:
+    run_vars, out_dir, tmp_dir, n_runs = process_args()
+    tables = setup_tables(run_vars, out_dir)
+    while run_i < n_runs:
         run_num = run_i + 1
         run_dir: Path = OUT_DIR / f"run_{run_num}"
         if not run_dir.exists():
@@ -377,12 +363,9 @@ def main() -> None:
         if "C60_y" in INPUT_VARS and run_i == int(INPUT_VARS["run_i"]):
             fu_y = float(INPUT_VARS["C60_y"])
         else:
+            fu_y = 0
             # fu_y = rnd_coord(C60_Y)
-            xlo = 41.8583296063435
-            xhi = 63.75459165297608
-            delta = xhi - xlo
-            fu_y = (np.random.rand() * delta) + xlo
-            fu_y = xlo
+
         if "crystal_x" in INPUT_VARS and run_i == int(INPUT_VARS["run_i"]):
             crystal_x = float(INPUT_VARS["crystal_x"])
         else:
@@ -392,7 +375,7 @@ def main() -> None:
             crystal_y = float(INPUT_VARS["crystal_y"])
         else:
             crystal_y = 0
-            # crystal_y = rnd_coord(CRYSTAL_Y)
+            crystal_y = rnd_coord(CRYSTAL_Y)
 
         dump_cluster_path = run_dir / "dump.cluster"
         dump_final_path = run_dir / "dump.final"
@@ -406,29 +389,6 @@ def main() -> None:
         if input_file != backup_input_file:
             shutil.copy(input_file, backup_input_file)
         input_file = backup_input_file
-
-        vars = {
-            "run_i": str(run_i),
-            "input_file": str(input_file),
-            "mol_file": str(MOL_FILE),
-            "elstop_table": str(ELSTOP_TABLE),
-            "graphene_data": str(GRAPHENE_FILE),
-            "lattice": str(lattice),
-            "C60_z_offset": str(c60_z_offset),
-            "C60_y": str(fu_y),
-            "C60_x": str(fu_x),
-            "crystal_x": str(crystal_x),
-            "crystal_y": str(crystal_y),
-            "step": str(step),
-            "temperature": str(temperature),
-            "energy": str(energy),
-            "zero_lvl": str(zero_lvl),
-            "run_time": str(run_time),
-            "dump_final": str(dump_final_path),
-            "dump_during": str(dump_during_path),
-            "write_file": str(write_file),
-            "energy_file": str(run_dir / "energy.txt"),
-        }
 
         vars_path: Path = run_dir / "vars.json"
         with open(vars_path, encoding="utf-8", mode="w") as f:
@@ -525,4 +485,11 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    comm = MPI.COMM_WORLD
+    lmp = lammps()
+    lmpmpi = LammpsMPI(lmp, comm, 0)
+    if comm.Get_rank() == 0:
+        main(lmpmpi)
+        lmpmpi.close()
+    else:
+        lmpmpi.listen()
