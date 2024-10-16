@@ -12,7 +12,6 @@ from typing import Optional
 import lammps_util  # type: ignore
 from lammps_util import Dump, Atom, Cluster
 
-from lammps import lammps  # type: ignore
 from mpi4py import MPI
 from lammps_mpi4py import LammpsMPI
 
@@ -24,8 +23,10 @@ C_ATOM_TYPE: int = 2
 IS_MULTIFALL: bool = False
 C60_WIDTH: int = 20
 
+
 def hyphenize(field: str):
     return field.replace("_", "-")
+
 
 class Arguments(BaseSettings, cli_parse_args=True):
     class Config:
@@ -269,13 +270,25 @@ def setup_tables(run_vars: RunVars, out_dir: Path) -> Tables:
     return tables
 
 
+def set_lmp_run_vars(lmp: LammpsMPI, run_vars: RunVars):
+    vars = run_vars.model_dump()
+    for key, value in vars.items():
+        match value:
+            case int() | float():
+                lmp.command(f"variable {key} equal {value}")
+            case None:
+                pass
+            case _:
+                lmp.command(f"variable {key} string {value}")
+
+
 def main(lmp: LammpsMPI) -> None:
     try:
         run_vars, out_dir, tmp_dir, n_runs = process_args()
     except SystemExit as e:
         print(e)
         return
-    
+
     tables = setup_tables(run_vars, out_dir)
     for run_i in range(run_vars.run_i, n_runs):
         run_num = run_i + 1
@@ -292,28 +305,30 @@ def main(lmp: LammpsMPI) -> None:
         run_vars.dump_cluster = run_dir / "dump.cluster"
         run_vars.output_file = tmp_dir / "tmp.input.data"
 
-        if not run_vars.C60_x or run_i != run_vars.run_i:
+        print(type(run_vars))
+        if hasattr(run_vars, "C60_x") or run_i != run_vars.run_i:
             run_vars.C60_x = rnd_coord(run_vars.C60_x_offset)
 
-        if not run_vars.C60_y or run_i != run_vars.run_i:
+        if hasattr(run_vars, "C60_y") or run_i != run_vars.run_i:
             run_vars.C60_y = rnd_coord(run_vars.C60_y_offset)
 
-        if not run_vars.crystal_x or run_i != run_vars.run_i:
+        if hasattr(run_vars, "crystal_x") or run_i != run_vars.run_i:
             run_vars.crystal_x = rnd_coord(0)
 
-        if not run_vars.crystal_y or run_i != run_vars.run_i:
+        if hasattr(run_vars, "crystal_y") or run_i != run_vars.run_i:
             run_vars.crystal_y = rnd_coord(0)
 
-        log_file: Path = run_dir / "log.lammps"
-
         backup_input_file: Path = run_dir / "input.data"
-        if input_file != backup_input_file:
-            shutil.copy(input_file, backup_input_file)
-        input_file = backup_input_file
+        if run_vars.input_file != backup_input_file:
+            shutil.copy(run_vars.input_file, backup_input_file)
+        run_vars.input_file = backup_input_file
 
+        run_vars = run_vars.model_validate(run_vars)
         with open(run_dir / "vars.json", mode="w") as f:
-            json.dump(run_vars.model_dump_json(), f, indent=2)
+            json.dump(json.loads(run_vars.model_dump_json()), f, indent=2)
 
+        lmp.command(f"log {run_dir / "log.lammps"}")
+        set_lmp_run_vars(lmp, run_vars)
         lmp.file("in.fall")
 
         dump_final = Dump(dump_final_path)
@@ -385,20 +400,13 @@ def main(lmp: LammpsMPI) -> None:
     lammps_util.clusters_parse_angle_dist(tables.clusters, n_runs)
     lammps_util.carbon_dist_parse(tables.carbon_dist)
 
-    print("*** FINISHED COMPLETELY ***")
-
-    with open(Path("./runs.log"), encoding="utf-8", mode="a") as f:
-        f.write(
-            f"{out_dir.name} {run_vars.input_file.name} {run_vars.energy} {run_vars.temperature} {n_runs}\n"
-        )
-
 
 if __name__ == "__main__":
     comm = MPI.COMM_WORLD
-    lmp = lammps()
-    lmpmpi = LammpsMPI(lmp, comm, 0)
+    lmp = LammpsMPI(comm, 0)
     if comm.Get_rank() == 0:
-        main(lmpmpi)
-        lmpmpi.close()
+        main(lmp)
+        print("*** FINISHED COMPLETELY ***")
+        lmp.close()
     else:
-        lmpmpi.listen()
+        lmp.listen()
