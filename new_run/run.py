@@ -6,6 +6,7 @@ from pathlib import Path
 import tempfile
 import json
 import operator
+import shutil
 from typing import Optional
 
 import lammps_util  # type: ignore
@@ -16,15 +17,20 @@ from mpi4py import MPI
 from lammps_mpi4py import LammpsMPI
 
 from pydantic import BaseModel, Field
-import pydantic_argparse
+from pydantic_settings import BaseSettings
 
 SI_ATOM_TYPE: int = 1
 C_ATOM_TYPE: int = 2
 IS_MULTIFALL: bool = False
 C60_WIDTH: int = 20
 
+def hyphenize(field: str):
+    return field.replace("_", "-")
 
-class Arguments(BaseModel):
+class Arguments(BaseSettings, cli_parse_args=True):
+    class Config:
+        alias_generator = hyphenize
+
     temperature: float = Field(
         default=1e6, description="Set temperature of the simulation. (K)"
     )
@@ -42,7 +48,7 @@ class Arguments(BaseModel):
         description="Set directory path where to store computational results."
     )
     input_file: str = Field(description="Set input file.")
-    input_vars: str = Field(description="Set input vars.")
+    input_vars: Optional[str] = Field(default=None, description="Set input vars.")
     cluster_file: str = Field(description="Set cluster file.")
     elstop_table: str = Field(description="Set electron stopping table file.")
 
@@ -54,8 +60,8 @@ class RunVars(BaseModel):
     C60_x_offset: float = Field(default=0)
     C60_y_offset: float = Field(default=0)
     C60_z_offset: float = Field(default=150)
-    C60_y: float
     C60_x: float
+    C60_y: float
 
     crystal_x: float
     crystal_y: float
@@ -70,6 +76,8 @@ class RunVars(BaseModel):
     output_file: Path
     dump_final: Path
     dump_during: Path
+    dump_crater: Path
+    dump_cluster: Path
     energy_file: Optional[Path] = None
 
     cluster_file: Path
@@ -203,16 +211,8 @@ def get_carbon_info(carbon, fu_x, fu_y, sim_num):
     return np.array([[sim_num, len(carbon), r.mean(), r.max()]])
 
 
-def parse_args() -> Arguments:
-    parser = pydantic_argparse.ArgumentParser(
-        model=Arguments,
-        description="Run Si bombardment with C60 simulation.",
-    )
-    return parser.parse_typed_args()
-
-
 def process_args() -> tuple[RunVars, Path, Path, int]:
-    args = parse_args()
+    args = Arguments()
 
     out_dir: Path = Path(args.results_dir)
     if not out_dir.exists():
@@ -235,8 +235,8 @@ def process_args() -> tuple[RunVars, Path, Path, int]:
     else:
         run_vars = RunVars.model_construct(
             input_file=Path(args.input_file),
-            mol_file=Path(args.mol_file),
-            estop_table=Path(args.estop_table),
+            cluster_file=Path(args.cluster_file),
+            elstop_table=Path(args.elstop_table),
             zero_lvl=82.7813,
             temperature=args.temperature,
             energy=args.energy,
@@ -270,7 +270,12 @@ def setup_tables(run_vars: RunVars, out_dir: Path) -> Tables:
 
 
 def main(lmp: LammpsMPI) -> None:
-    run_vars, out_dir, tmp_dir, n_runs = process_args()
+    try:
+        run_vars, out_dir, tmp_dir, n_runs = process_args()
+    except SystemExit as e:
+        print(e)
+        return
+    
     tables = setup_tables(run_vars, out_dir)
     for run_i in range(run_vars.run_i, n_runs):
         run_num = run_i + 1
