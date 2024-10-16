@@ -3,20 +3,20 @@
 import sys
 import numpy as np
 from pathlib import Path
-import argparse
 import tempfile
 import json
 import operator
 from typing import Optional
 
-import lammps_util
+import lammps_util  # type: ignore
 from lammps_util import Dump, Atom, Cluster
 
-from lammps import lammps
+from lammps import lammps  # type: ignore
 from mpi4py import MPI
 from lammps_mpi4py import LammpsMPI
 
 from pydantic import BaseModel, Field
+import pydantic_argparse
 
 SI_ATOM_TYPE: int = 1
 C_ATOM_TYPE: int = 2
@@ -24,124 +24,42 @@ IS_MULTIFALL: bool = False
 C60_WIDTH: int = 20
 
 
-def parse_args() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Run Si bombardment with C60 simulation."
+class Arguments(BaseModel):
+    temperature: float = Field(
+        default=1e6, description="Set temperature of the simulation. (K)"
     )
-
-    parser.add_argument(
-        "--temperature",
-        action="store",
-        required=False,
-        default=700,
-        type=float,
-        help="Set temperature of the simulation. (K)",
+    energy: float = Field(
+        default=8, description="Set fall energy of the simulation. (keV)"
     )
-
-    parser.add_argument(
-        "--energy",
-        action="store",
-        required=False,
-        default=8,
-        type=float,
-        help="Set fall energy of the simulation. (keV)",
+    runs: int = Field(default=1, description="Number of simulations to run.")
+    run_time: int = Field(
+        default=1000, description="Run simulation this amount of steps."
     )
-
-    parser.add_argument(
-        "--runs",
-        action="store",
-        required=False,
-        default=2,
-        type=int,
-        help="Number of simulations to run.",
+    omp_threads: int = Field(
+        default=2, description="Set number of OpenMP threads. (if set to 0 use GPU)"
     )
-
-    parser.add_argument(
-        "--run-time",
-        action="store",
-        required=False,
-        default=None,
-        type=int,
-        help="Run simulation this amount of steps.",
+    results_dir: str = Field(
+        description="Set directory path where to store computational results."
     )
-
-    parser.add_argument(
-        "--omp-threads",
-        action="store",
-        required=False,
-        default=2,
-        type=int,
-        help="Set number of OpenMP threads. (if set to 0 use GPU)",
-    )
-
-    parser.add_argument(
-        "--results-dir",
-        action="store",
-        required=False,
-        default="./results",
-        type=str,
-        help="Set directory path where to store computational results.",
-    )
-
-    parser.add_argument(
-        "--input-file",
-        action="store",
-        required=True,
-        type=str,
-        help="Set input file.",
-    )
-
-    parser.add_argument(
-        "--input-vars",
-        action="store",
-        required=False,
-        type=str,
-        help="Set input vars.",
-    )
-
-    parser.add_argument(
-        "--mol-file",
-        action="store",
-        required=True,
-        type=str,
-        help="Set C60 molecule file.",
-    )
-
-    parser.add_argument(
-        "--estop-table",
-        action="store",
-        required=True,
-        type=str,
-        help="Set electron stopping table file.",
-    )
-
-    parser.add_argument(
-        "--graphene-file",
-        action="store",
-        required=False,
-        type=str,
-        help="Set graphene data file.",
-    )
-
-    parser.add_argument(
-        "--script-dir",
-        action="store",
-        required=True,
-        type=str,
-        help="Set directory containing input scripts",
-    )
-
-    return parser.parse_args()
+    input_file: str = Field(description="Set input file.")
+    input_vars: str = Field(description="Set input vars.")
+    cluster_file: str = Field(description="Set cluster file.")
+    elstop_table: str = Field(description="Set electron stopping table file.")
 
 
 class RunVars(BaseModel):
     run_i: int = Field(default=0)
     lattice: float = Field(default=5.43)
+
+    C60_x_offset: float = Field(default=0)
+    C60_y_offset: float = Field(default=0)
     C60_z_offset: float = Field(default=150)
-    C60_y: float = Field(default=0)
-    C60_x: float = Field(default=0)
-    crystal_x: float = Field(default=0)
-    crystal_y: float = Field(default=0)
+    C60_y: float
+    C60_x: float
+
+    crystal_x: float
+    crystal_y: float
+
     step: float = Field(default=1e-3)
     temperature: float
     energy: float
@@ -285,6 +203,14 @@ def get_carbon_info(carbon, fu_x, fu_y, sim_num):
     return np.array([[sim_num, len(carbon), r.mean(), r.max()]])
 
 
+def parse_args() -> Arguments:
+    parser = pydantic_argparse.ArgumentParser(
+        model=Arguments,
+        description="Run Si bombardment with C60 simulation.",
+    )
+    return parser.parse_typed_args()
+
+
 def process_args() -> tuple[RunVars, Path, Path, int]:
     args = parse_args()
 
@@ -305,9 +231,9 @@ def process_args() -> tuple[RunVars, Path, Path, int]:
         f_path = Path(args.input_vars)
         with open(f_path, mode="r") as f:
             json_data = json.load(f)
-            run_vars = RunVars.model_validate_json(json_data)
+            run_vars = RunVars.model_construct(json_data)
     else:
-        run_vars = RunVars(
+        run_vars = RunVars.model_construct(
             input_file=Path(args.input_file),
             mol_file=Path(args.mol_file),
             estop_table=Path(args.estop_table),
@@ -346,65 +272,44 @@ def setup_tables(run_vars: RunVars, out_dir: Path) -> Tables:
 def main(lmp: LammpsMPI) -> None:
     run_vars, out_dir, tmp_dir, n_runs = process_args()
     tables = setup_tables(run_vars, out_dir)
-    while run_i < n_runs:
+    for run_i in range(run_vars.run_i, n_runs):
         run_num = run_i + 1
-        run_dir: Path = OUT_DIR / f"run_{run_num}"
+        run_dir: Path = out_dir / f"run_{run_num}"
         if not run_dir.exists():
             run_dir.mkdir()
 
-        def rnd_coord(coord: float) -> float:
-            return coord + (np.random.rand() * 2 - 1) * lattice * C60_WIDTH
+        def rnd_coord(offset: float) -> float:
+            return offset + (np.random.rand() * 2 - 1) * run_vars.lattice * C60_WIDTH
 
-        if "C60_x" in INPUT_VARS and run_i == int(INPUT_VARS["run_i"]):
-            fu_x = float(INPUT_VARS["C60_x"])
-        else:
-            fu_x = 0
-            # fu_x = rnd_coord(C60_X)
-        if "C60_y" in INPUT_VARS and run_i == int(INPUT_VARS["run_i"]):
-            fu_y = float(INPUT_VARS["C60_y"])
-        else:
-            fu_y = 0
-            # fu_y = rnd_coord(C60_Y)
+        run_vars.dump_during = run_dir / "dump.during"
+        run_vars.dump_final = run_dir / "dump.final"
+        run_vars.dump_crater = run_dir / "dump.crater"
+        run_vars.dump_cluster = run_dir / "dump.cluster"
+        run_vars.output_file = tmp_dir / "tmp.input.data"
 
-        if "crystal_x" in INPUT_VARS and run_i == int(INPUT_VARS["run_i"]):
-            crystal_x = float(INPUT_VARS["crystal_x"])
-        else:
-            crystal_x = 0
-            crystal_x = rnd_coord(CRYSTAL_X)
-        if "crystal_y" in INPUT_VARS and run_i == int(INPUT_VARS["run_i"]):
-            crystal_y = float(INPUT_VARS["crystal_y"])
-        else:
-            crystal_y = 0
-            crystal_y = rnd_coord(CRYSTAL_Y)
+        if not run_vars.C60_x or run_i != run_vars.run_i:
+            run_vars.C60_x = rnd_coord(run_vars.C60_x_offset)
 
-        dump_cluster_path = run_dir / "dump.cluster"
-        dump_final_path = run_dir / "dump.final"
-        dump_during_path = run_dir / "dump.during"
-        dump_crater_path = run_dir / "dump.crater"
+        if not run_vars.C60_y or run_i != run_vars.run_i:
+            run_vars.C60_y = rnd_coord(run_vars.C60_y_offset)
+
+        if not run_vars.crystal_x or run_i != run_vars.run_i:
+            run_vars.crystal_x = rnd_coord(0)
+
+        if not run_vars.crystal_y or run_i != run_vars.run_i:
+            run_vars.crystal_y = rnd_coord(0)
 
         log_file: Path = run_dir / "log.lammps"
-        write_file = TMP / "tmp.input.data"
 
         backup_input_file: Path = run_dir / "input.data"
         if input_file != backup_input_file:
             shutil.copy(input_file, backup_input_file)
         input_file = backup_input_file
 
-        vars_path: Path = run_dir / "vars.json"
-        with open(vars_path, encoding="utf-8", mode="w") as f:
-            json.dump(vars, f, indent=2)
+        with open(run_dir / "vars.json", mode="w") as f:
+            json.dump(run_vars.model_dump_json(), f, indent=2)
 
-        if (
-            lammps_util.lammps_run(
-                SCRIPT_DIR / "in.fall",
-                vars,
-                omp_threads=OMP_THREADS,
-                mpi_cores=MPI_CORES,
-                log_file=log_file,
-            )
-            != 0
-        ):
-            sys.exit(1)
+        lmp.file("in.fall")
 
         dump_final = Dump(dump_final_path)
         lammps_util.create_clusters_dump(
@@ -436,7 +341,7 @@ def main(lmp: LammpsMPI) -> None:
             dump_final_no_cluster, run_dir, lattice, zero_lvl, C60_WIDTH
         )
         if IS_MULTIFALL:
-            write_file_no_clusters = TMP / "tmp_no_cluster.input.data"
+            write_file_no_clusters = tmp_dir / "tmp_no_cluster.input.data"
             lammps_util.input_delete_atoms(
                 write_file, write_file_no_clusters, ids_to_delete
             )
@@ -460,28 +365,27 @@ def main(lmp: LammpsMPI) -> None:
             )
             dump_crater = Dump(dump_crater_path)
             crater_info = lammps_util.get_crater_info(dump_crater, run_num, zero_lvl)
-            lammps_util.save_table(CRATER_TABLE, crater_info, mode="a")
+            lammps_util.save_table(tables.crater, crater_info, mode="a")
 
-        lammps_util.save_table(CLUSTERS_TABLE, clusters_table, mode="a")
-        lammps_util.save_table(RIM_TABLE, rim_info, mode="a")
-        lammps_util.save_table(CARBON_DIST, carbon_hist, header=str(run_num), mode="a")
-        lammps_util.save_table(CARBON_TABLE, carbon_info, mode="a")
-        # save_table(run_dir / 'surface_table.txt', surface_data, mode='w')
-        lammps_util.save_table(SURFACE_TABLE, [[run_num, sigma]], mode="a")
+        lammps_util.save_table(tables.clusters, clusters_table, mode="a")
+        lammps_util.save_table(tables.rim, rim_info, mode="a")
+        lammps_util.save_table(
+            tables.carbon_dist, carbon_hist, header=str(run_num), mode="a"
+        )
+        lammps_util.save_table(tables.carbon, carbon_info, mode="a")
+        lammps_util.save_table(tables.surface, [[run_num, sigma]], mode="a")
 
-        # dump_final_no_cluster_path.unlink()
-
-        run_i += 1
-
-    lammps_util.clusters_parse(CLUSTERS_TABLE, N_RUNS)
-    lammps_util.clusters_parse_sum(CLUSTERS_TABLE, N_RUNS)
-    lammps_util.clusters_parse_angle_dist(CLUSTERS_TABLE, N_RUNS)
-    lammps_util.carbon_dist_parse(CARBON_DIST)
+    lammps_util.clusters_parse(tables.clusters, n_runs)
+    lammps_util.clusters_parse_sum(tables.clusters, n_runs)
+    lammps_util.clusters_parse_angle_dist(tables.clusters, n_runs)
+    lammps_util.carbon_dist_parse(tables.carbon_dist)
 
     print("*** FINISHED COMPLETELY ***")
 
     with open(Path("./runs.log"), encoding="utf-8", mode="a") as f:
-        f.write(f"{OUT_DIR.name} {INPUT_FILE.name} {energy} {temperature} {N_RUNS}\n")
+        f.write(
+            f"{out_dir.name} {run_vars.input_file.name} {run_vars.energy} {run_vars.temperature} {n_runs}\n"
+        )
 
 
 if __name__ == "__main__":
