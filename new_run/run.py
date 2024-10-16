@@ -15,7 +15,7 @@ from lammps_util import Dump, Atom, Cluster
 from mpi4py import MPI
 from lammps_mpi4py import LammpsMPI
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from pydantic_settings import BaseSettings
 
 SI_ATOM_TYPE: int = 1
@@ -55,6 +55,8 @@ class Arguments(BaseSettings, cli_parse_args=True):
 
 
 class RunVars(BaseModel):
+    model_config = ConfigDict(revalidate_instances="always")
+
     run_i: int = Field(default=0)
     lattice: float = Field(default=5.43)
 
@@ -223,27 +225,23 @@ def process_args() -> tuple[RunVars, Path, Path, int]:
     if not tmp_dir.exists():
         tmp_dir.mkdir()
 
-    runs: int = args.runs
-
     lammps_util.setup_root_logger(out_dir / "run.log")
 
     run_vars: RunVars
     if args.input_vars is not None:
-        f_path = Path(args.input_vars)
-        with open(f_path, mode="r") as f:
-            json_data = json.load(f)
-            run_vars = RunVars.model_construct(json_data)
+        with open(args.input_vars, mode="r") as f:
+            run_vars = RunVars.model_construct(json.load(f))
     else:
         run_vars = RunVars.model_construct(
-            input_file=Path(args.input_file),
-            cluster_file=Path(args.cluster_file),
-            elstop_table=Path(args.elstop_table),
-            zero_lvl=82.7813,
-            temperature=args.temperature,
-            energy=args.energy,
+            zero_lvl=82.7813, input_file=Path(args.input_file)
         )
 
-    return run_vars, out_dir, tmp_dir, runs
+    run_vars.cluster_file = Path(args.cluster_file)
+    run_vars.elstop_table = Path(args.elstop_table)
+    run_vars.temperature = args.temperature
+    run_vars.energy = args.energy
+
+    return run_vars, out_dir, tmp_dir, args.runs
 
 
 def setup_tables(run_vars: RunVars, out_dir: Path) -> Tables:
@@ -305,7 +303,6 @@ def main(lmp: LammpsMPI) -> None:
         run_vars.dump_cluster = run_dir / "dump.cluster"
         run_vars.output_file = tmp_dir / "tmp.input.data"
 
-        print(type(run_vars))
         if hasattr(run_vars, "C60_x") or run_i != run_vars.run_i:
             run_vars.C60_x = rnd_coord(run_vars.C60_x_offset)
 
@@ -323,7 +320,7 @@ def main(lmp: LammpsMPI) -> None:
             shutil.copy(run_vars.input_file, backup_input_file)
         run_vars.input_file = backup_input_file
 
-        run_vars = run_vars.model_validate(run_vars)
+        run_vars = RunVars.model_validate(run_vars)
         with open(run_dir / "vars.json", mode="w") as f:
             json.dump(json.loads(run_vars.model_dump_json()), f, indent=2)
 
