@@ -1,9 +1,7 @@
 #!/usr/bin/env python
 
-import sys
 import numpy as np
 from pathlib import Path
-import tempfile
 import json
 import operator
 import shutil
@@ -21,7 +19,10 @@ from pydantic_settings import BaseSettings
 SI_ATOM_TYPE: int = 1
 C_ATOM_TYPE: int = 2
 IS_MULTIFALL: bool = False
+
 C60_WIDTH: int = 20
+CLUSTER_AMASS: float = 12.011
+CLUSTER_COUNT: int = 60
 
 
 def hyphenize(field: str):
@@ -54,24 +55,26 @@ class Arguments(BaseSettings, cli_parse_args=True):
     elstop_table: str = Field(description="Set electron stopping table file.")
 
 
+class Vector3D(BaseModel):
+    x: float = Field(default=0)
+    y: float = Field(default=0)
+    z: float = Field(default=0)
+
+
 class RunVars(BaseModel):
     model_config = ConfigDict(revalidate_instances="always")
 
-    run_i: int = Field(default=0)
+    run_i: int = Field(default=1)
     lattice: float = Field(default=5.43)
 
-    C60_x_offset: float = Field(default=0)
-    C60_y_offset: float = Field(default=0)
-    C60_z_offset: float = Field(default=150)
-    C60_x: float
-    C60_y: float
+    cluster_offset: Vector3D = Field(default=Vector3D(z=150))
+    cluster_position: Vector3D
+    cluster_velocity: Vector3D
 
-    crystal_x: float
-    crystal_y: float
+    crystal_offset: Vector3D
 
     step: float = Field(default=1e-3)
     temperature: float
-    energy: float
     zero_lvl: float
     run_time: int
 
@@ -240,6 +243,7 @@ def process_args() -> tuple[RunVars, Path, Path, int]:
     run_vars.elstop_table = Path(args.elstop_table)
     run_vars.temperature = args.temperature
     run_vars.energy = args.energy
+    run_vars.run_time = args.run_time
 
     return run_vars, out_dir, tmp_dir, args.runs
 
@@ -256,7 +260,7 @@ def setup_tables(run_vars: RunVars, out_dir: Path) -> Tables:
         coord_num=out_dir / "coord_num_table.txt",
     )
 
-    if run_vars.run_i == 0:
+    if run_vars.run_i == 1:
         write_header("sim_num N_Si N_C mass Px Py Pz Ek angle", tables.clusters)
         write_header("sim_num N r_mean r_max", tables.carbon)
         write_header("z count", tables.carbon_dist)
@@ -288,8 +292,7 @@ def main(lmp: LammpsMPI) -> None:
         return
 
     tables = setup_tables(run_vars, out_dir)
-    for run_i in range(run_vars.run_i, n_runs):
-        run_num = run_i + 1
+    for run_num in range(run_vars.run_i, n_runs + 1):
         run_dir: Path = out_dir / f"run_{run_num}"
         if not run_dir.exists():
             run_dir.mkdir()
@@ -297,23 +300,29 @@ def main(lmp: LammpsMPI) -> None:
         def rnd_coord(offset: float) -> float:
             return offset + (np.random.rand() * 2 - 1) * run_vars.lattice * C60_WIDTH
 
+        def check_run_vars_field(field_name: str) -> bool:
+            return (not hasattr(run_vars, field_name)) or run_num != run_vars.run_i
+
         run_vars.dump_during = run_dir / "dump.during"
         run_vars.dump_final = run_dir / "dump.final"
         run_vars.dump_crater = run_dir / "dump.crater"
         run_vars.dump_cluster = run_dir / "dump.cluster"
         run_vars.output_file = tmp_dir / "tmp.input.data"
 
-        if hasattr(run_vars, "C60_x") or run_i != run_vars.run_i:
-            run_vars.C60_x = rnd_coord(run_vars.C60_x_offset)
+        if check_run_vars_field("cluster_position"):
+            run_vars.cluster_position = Vector3D.model_validate(run_vars.cluster_offset)
+            run_vars.cluster_position.x = rnd_coord(run_vars.cluster_position.x)
+            run_vars.cluster_position.y = rnd_coord(run_vars.cluster_position.y)
 
-        if hasattr(run_vars, "C60_y") or run_i != run_vars.run_i:
-            run_vars.C60_y = rnd_coord(run_vars.C60_y_offset)
+        if check_run_vars_field("cluster_velocity"):
+            run_vars.cluster_velocity = Vector3D()
+            run_vars.cluster_velocity.z = (
+                -np.sqrt(run_vars.energy * 1000 / CLUSTER_AMASS / CLUSTER_COUNT)
+                * 138.842
+            )
 
-        if hasattr(run_vars, "crystal_x") or run_i != run_vars.run_i:
-            run_vars.crystal_x = rnd_coord(0)
-
-        if hasattr(run_vars, "crystal_y") or run_i != run_vars.run_i:
-            run_vars.crystal_y = rnd_coord(0)
+        if check_run_vars_field("crystal_offset"):
+            run_vars.crystal_offset = Vector3D()
 
         backup_input_file: Path = run_dir / "input.data"
         if run_vars.input_file != backup_input_file:
@@ -326,6 +335,8 @@ def main(lmp: LammpsMPI) -> None:
 
         lmp.command(f"log {run_dir / "log.lammps"}")
         set_lmp_run_vars(lmp, run_vars)
+        lmp.command("package gpu 0 neigh no")
+        lmp.command("suffix gpu")
         lmp.file("in.fall")
 
         dump_final = Dump(dump_final_path)

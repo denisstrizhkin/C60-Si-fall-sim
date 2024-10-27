@@ -1,55 +1,39 @@
 ### init ###
 units metal
-dimension 3
 boundary p p m
-atom_style atomic
 atom_modify map yes
-
 read_data ${input_file}
 
+
 ### variables ###
-variable bottom_fixed_top equal 'zlo + 0.5 * v_lattice'
-variable thermostat_floor_top equal 'v_bottom_fixed_top + v_lattice'
+variable fixed_zhi equal 'zlo + 0.5 * v_lattice'
+variable thermostat_zhi equal 'v_fixed_zhi + v_lattice'
 
-variable cluster_count equal '60' # FIX
-variable cluster_amass equal '12.011' # FIX
-
-variable C60_z equal 'v_C60_z_offset + v_zero_lvl'
-variable C60_vel equal '-sqrt(v_energy * 1000 / v_cluster_amass / v_cluster_count) * 138.842'
-
-### variables block ###
-variable cos_1 equal '0.9902680687415704'
-variable cos_2 equal '0.13917310096006547'
-variable C60_vel_z equal 'v_C60_vel * v_cos_1'
-variable C60_vel_x equal '-v_C60_vel * v_cos_2'
-variable block_zlo equal 'v_zero_lvl + 5.9 * v_lattice'
-variable block_zhi equal 'v_block_zlo + 60.2 * v_lattice'
 
 ### regions ###
 lattice diamond ${lattice} orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
 
-region nve1 block EDGE EDGE EDGE                   EDGE                   EDGE                      ${bottom_fixed_top}        side out units box
-region nve2 block EDGE EDGE EDGE                   $(ylo + v_lattice * 1) $(v_block_zlo)            $(v_block_zhi)             side out units box
-region nve3 block EDGE EDGE $(yhi - v_lattice * 1) EDGE                   $(v_block_zlo)            $(v_block_zhi)             side out units box
-region nve intersect 3 nve1 nve2 nve3
+region fixed      block EDGE EDGE EDGE EDGE EDGE         ${fixed_zhi}      unitx box
+region thermostat block EDGE EDGE EDGE EDGE ${fixed_zhi} ${thermostat_zhi} units box
 
-region block block EDGE EDGE EDGE EDGE $(v_block_zlo) $(v_block_zhi) units box
-
-region thermostat1 block EDGE EDGE EDGE              EDGE ${bottom_fixed_top} ${thermostat_floor_top} units box
-region thermostat2 block EDGE EDGE $(18 * v_lattice) EDGE $(v_block_zlo)      $(v_block_zhi)          units box
-region thermostat union 2 thermostat1 thermostat2
-
-region dt_reset block EDGE EDGE EDGE EDGE EDGE EDGE units box
-region estop    block EDGE EDGE EDGE EDGE EDGE                $(v_zero_lvl + 0.5)     units box
+region dt_reset block EDGE EDGE EDGE EDGE EDGE EDGE                units box
+region estop    block EDGE EDGE EDGE EDGE EDGE $(v_zero_lvl + 0.5) units box
 
 
 ### potentials ###
-
-pair_style tersoff/zbl
-pair_coeff * * SiC.tersoff.zbl Si C
+pair_style  hybrid table linear 3000 tersoff/zbl zbl 6.8 6.8
+pair_coeff  * * tersoff/gpu/zbl SiC.tersoff.zbl Si NULL
+pair_coeff  1 2 zbl/gpu 14.0 6.0 # FIX
+pair_coeff  2 2 table/gpu /mnt/data/lammps/single/Ar_basic/ArAr12.lmptab Ar-Ar # FIX
 neigh_modify every 1 delay 0 check no
 neigh_modify binsize 0.0
 neigh_modify one 4000
+
+# pair_style tersoff/zbl
+# pair_coeff * * SiC.tersoff.zbl Si C
+# neigh_modify every 1 delay 0 check no
+# neigh_modify binsize 0.0
+# neigh_modify one 4000
 
 # pair_style  hybrid airebo 3.0 tersoff/zbl
 # pair_coeff  * * tersoff/zbl SiC.tersoff.zbl Si C
@@ -58,32 +42,28 @@ neigh_modify one 4000
 # neighbor    3.0 bin
 
 
-### graphene ###
-# read_data ${graphene_data} add append offset 1 0 0 0 0 shift -100 -100 $(v_zero_lvl + 3) group graphene
-
-
 ### displace atoms ###
 group Si type 1
-displace_atoms all move ${crystal_x} ${crystal_y} 0 units box
+displace_atoms all move &
+  ${crystal_position_x} ${crystal_position_y} ${crystal_position_z} units box
 
-### groups ###
-group C type 2
-group block region block
 
 ### C60 molecule ###
-read_data ${mol_file} group C60 add append shift ${C60_x} ${C60_y} ${C60_z}
+read_data ${cluster_file} group C60 add append shift &
+  ${cluster_offset_x} ${cluster_offset_y} ${cluster_offset_z}
 balance 1.0 shift xyz 10 1.0
 
 
 ### groups ###
-group nve dynamic all region nve every 1
+group C type 2
+group fixed region fixed 
 group thermostat dynamic all region thermostat every 1
-
 group dt_reset dynamic all region dt_reset every 10
 
 
 ### computes ###
 compute atom_ke all ke/atom
+
 
 # voronoi
 compute voro_occupation Si voronoi/atom occupation only_group
@@ -91,43 +71,39 @@ variable is_vacancy atom "c_voro_occupation[1]==0"
 variable vacancy_id atom "v_is_vacancy*id"
 compute vacancies Si reduce sum v_is_vacancy
 
-# sputtered atoms
-variable is_sputtered atom "z>(v_zero_lvl - 5 * v_lattice)"
-compute sputter_all all reduce sum v_is_sputtered
-compute sputter_si  Si  reduce sum v_is_sputtered
-compute sputter_c   C   reduce sum v_is_sputtered
-
 
 ### thermo ###
 reset_timestep 0
 timestep $(v_step)
 thermo 1
-thermo_style custom step pe ke etotal temp c_vacancies dt time c_sputter_all c_sputter_c c_sputter_si
+thermo_style custom step pe ke etotal temp c_vacancies dt time
 
 
 ### fixes ###
-fix balance all balance 20 1.0 shift xyz 10 1.0
-fix nve nve nve
+fix balance all balance 100 1.0 shift xyz 10 1.0
+fix nve all nve
+fix fixed fixed setforce 0 0 0
 fix tbath thermostat temp/berendsen ${temperature} ${temperature} 0.001
 fix estop all electron/stopping 10.0 ${elstop_table} region estop
 fix dt dt_reset dt/reset 1 $(v_step/10) $(v_step) 0.1
 
 
 ### dumps ###
-dump during all custom 20 ${dump_during} id type x y z vx vy vz c_atom_ke
+# dump during C60 custom 10 ${dump_during} id type x y z vx vy vz c_atom_ke
 
 
 ### run simulation ###
-velocity C60 set NULL ${C60_vel_x} ${C60_vel_z} sum yes units box
+velocity C60 set ${cluster_velocity_x} ${cluster_velocity_y} ${cluster_velocity_z} &
+  sum yes units box
 
 label run_a
 run 100
-if "$(time) > 0.7" then "delete_atoms group block compress no"
 if "$(time) < 1" then "jump SELF run_a"
 
 unfix estop
 unfix dt
 group dt_reset delete
+
 thermo 20
 run $(v_run_time - 1000)
  
@@ -135,11 +111,3 @@ dump final all custom 1 ${dump_final} id x y z vx vy vz type c_atom_ke
 run 0
 
 write_data ${write_file}
-
-# unfix tbath
-# fix tbath nve temp/berendsen ${temperature} ${temperature} 0.001
-# run 1000 
-# 
-# unfix tbath
-# fix tbath thermostat temp/berendsen ${temperature} ${temperature} 0.001
-# run 2000
