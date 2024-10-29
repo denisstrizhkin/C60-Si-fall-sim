@@ -391,14 +391,14 @@ def main(lmp: LammpsMPI) -> None:
             lammps_util.input_delete_atoms(
                 run_vars.output_file, write_file_no_clusters, ids_to_delete
             )
-            input_file = write_file_no_clusters
+            run_vars.input_file = write_file_no_clusters
         else:
-            dump_init_path = input_file.parent / "dump.input"
-            lammps_util.create_dump_from_input(lmp, input_file, dump_init_path)
+            dump_init_path = run_vars.input_file.parent / "dump.input"
+            lammps_util.create_dump_from_input(lmp, run_vars.input_file, dump_init_path)
             dump_init = Dump(dump_init_path)
-            input_file_no_block = input_file.with_stem(input_file.stem + "_no_block")
+            input_file_no_block = run_vars.input_file.with_stem(run_vars.input_file.stem + "_no_block")
             lammps_util.input_delete_atoms(
-                input_file,
+                run_vars.input_file,
                 input_file_no_block,
                 dump_init["id"][
                     np.where(dump_init["z"] > run_vars.zero_lvl + 10)
