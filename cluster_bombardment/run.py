@@ -8,7 +8,7 @@ import operator
 import shutil
 from typing import Optional
 
-import lammps_util  # type: ignore
+import lammps_util
 from lammps_util import Dump, Atom, Cluster
 
 from mpi4py import MPI
@@ -350,7 +350,10 @@ def main(lmp: LammpsMPI) -> None:
 
         dump_final = Dump(run_vars.dump_final)
         lammps_util.create_clusters_dump(
-            dump_final.name, dump_final.timesteps[0][0], run_vars.dump_cluster
+            lmp,
+            Path(dump_final.name),
+            dump_final.timesteps[0][0],
+            run_vars.dump_cluster,
         )
         dump_cluster = Dump(run_vars.dump_cluster)
 
@@ -391,15 +394,18 @@ def main(lmp: LammpsMPI) -> None:
             input_file = write_file_no_clusters
         else:
             dump_init_path = input_file.parent / "dump.input"
-            lammps_util.create_dump_from_input(input_file, dump_init_path)
+            lammps_util.create_dump_from_input(lmp, input_file, dump_init_path)
             dump_init = Dump(dump_init_path)
             input_file_no_block = input_file.with_stem(input_file.stem + "_no_block")
             lammps_util.input_delete_atoms(
                 input_file,
                 input_file_no_block,
-                dump_init["id"][np.where(dump_init["z"] > run_vars.zero_lvl + 10)],
+                dump_init["id"][
+                    np.where(dump_init["z"] > run_vars.zero_lvl + 10)
+                ].tolist(),
             )
             lammps_util.create_crater_dump(
+                lmp,
                 run_vars.dump_crater,
                 dump_final_no_cluster,
                 input_file_no_block,
