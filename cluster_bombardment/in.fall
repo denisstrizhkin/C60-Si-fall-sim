@@ -13,7 +13,7 @@ variable thermostat_zhi equal 'v_fixed_zhi + v_lattice'
 ### regions ###
 lattice diamond ${lattice} orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
 
-region fixed      block EDGE EDGE EDGE EDGE EDGE         ${fixed_zhi}      unitx box
+region fixed      block EDGE EDGE EDGE EDGE EDGE         ${fixed_zhi}      units box
 region thermostat block EDGE EDGE EDGE EDGE ${fixed_zhi} ${thermostat_zhi} units box
 
 region dt_reset block EDGE EDGE EDGE EDGE EDGE EDGE                units box
@@ -22,9 +22,9 @@ region estop    block EDGE EDGE EDGE EDGE EDGE $(v_zero_lvl + 0.5) units box
 
 ### potentials ###
 pair_style  hybrid table linear 3000 tersoff/zbl zbl 6.8 6.8
-pair_coeff  * * tersoff/gpu/zbl SiC.tersoff.zbl Si NULL
-pair_coeff  1 2 zbl/gpu 14.0 6.0 # FIX
-pair_coeff  2 2 table/gpu /mnt/data/lammps/single/Ar_basic/ArAr12.lmptab Ar-Ar # FIX
+pair_coeff  * * tersoff/zbl SiC.tersoff.zbl Si NULL
+pair_coeff  1 2 zbl 14.0 6.0 # FIX
+pair_coeff  2 2 table /mnt/data/lammps/single/Ar_basic/ArAr12.lmptab Ar-Ar # FIX
 neigh_modify every 1 delay 0 check no
 neigh_modify binsize 0.0
 neigh_modify one 4000
@@ -45,7 +45,7 @@ neigh_modify one 4000
 ### displace atoms ###
 group Si type 1
 displace_atoms all move &
-  ${crystal_position_x} ${crystal_position_y} ${crystal_position_z} units box
+  ${crystal_offset_x} ${crystal_offset_y} ${crystal_offset_z} units box
 
 
 ### C60 molecule ###
@@ -110,4 +110,4 @@ run $(v_run_time - 1000)
 dump final all custom 1 ${dump_final} id x y z vx vy vz type c_atom_ke
 run 0
 
-write_data ${write_file}
+write_data ${output_file}

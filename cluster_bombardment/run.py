@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import numpy as np
+import numpy.typing as npt
 from pathlib import Path
 import json
 import operator
@@ -74,6 +75,7 @@ class RunVars(BaseModel):
     crystal_offset: Vector3D
 
     step: float = Field(default=1e-3)
+    energy: float
     temperature: float
     zero_lvl: float
     run_time: int
@@ -150,14 +152,14 @@ def get_clusters_table(cluster_dic, sim_num):
 
 
 def get_rim_info(
-    rim_atoms: list[Atom], fu_x: float, fu_y: float, sim_num: int, zero_lvl: float
+    rim_atoms: list[Atom], cluster_pos: Vector3D, sim_num: int, zero_lvl: float
 ) -> np.ndarray:
     if len(rim_atoms) == 0:
         return np.array([])
 
     def radius(atom: Atom) -> float:
-        dx = atom.x - fu_x
-        dy = atom.y - fu_y
+        dx = atom.x - cluster_pos.x
+        dy = atom.y - cluster_pos.y
         return np.sqrt(dx**2 + dy**2)
 
     r = np.fromiter(map(radius, rim_atoms), float)
@@ -190,7 +192,7 @@ def get_carbon(dump_final: Dump, carbon_sputtered: set[int]) -> list[Atom]:
     return carbon
 
 
-def get_carbon_hist(carbon: list[Atom], zero_lvl: float) -> np.ndarray:
+def get_carbon_hist(carbon: list[Atom], zero_lvl: float) -> npt.NDArray[np.float64]:
     z_coords = np.fromiter(map(operator.attrgetter("z"), carbon), float)
     if len(z_coords) == 0:
         return np.asarray([[-0.5, 0.0], [0.5, 0.0]])
@@ -205,28 +207,25 @@ def get_carbon_hist(carbon: list[Atom], zero_lvl: float) -> np.ndarray:
     return hist
 
 
-def get_carbon_info(carbon, fu_x, fu_y, sim_num):
+def get_carbon_info(
+    carbon: list[Atom], cluster_pos: Vector3D, sim_num: int
+) -> npt.NDArray[np.float64]:
     if len(carbon) == 0:
         return np.array([])
 
-    r = []
-    for atom in carbon:
-        r.append(np.sqrt((atom.x - fu_x) ** 2 + (atom.y - fu_y) ** 2))
-    r = np.array(r)
+    def radius(atom: Atom) -> float:
+        return np.sqrt((atom.x - cluster_pos.x) ** 2 + (atom.y - cluster_pos.y) ** 2)
 
+    r = np.fromiter(map(radius, carbon), float)
     return np.array([[sim_num, len(carbon), r.mean(), r.max()]])
 
 
-def process_args() -> tuple[RunVars, Path, Path, int]:
+def process_args() -> tuple[RunVars, Path, int, list[str]]:
     args = Arguments()
 
     out_dir: Path = Path(args.results_dir)
     if not out_dir.exists():
         out_dir.mkdir()
-
-    tmp_dir: Path = out_dir / "tmp"
-    if not tmp_dir.exists():
-        tmp_dir.mkdir()
 
     lammps_util.setup_root_logger(out_dir / "run.log")
 
@@ -245,7 +244,13 @@ def process_args() -> tuple[RunVars, Path, Path, int]:
     run_vars.energy = args.energy
     run_vars.run_time = args.run_time
 
-    return run_vars, out_dir, tmp_dir, args.runs
+    accelerator_cmds: list[str] = []
+    if args.omp_threads > 0:
+        accelerator_cmds += [f"package omp {args.omp_threads}", "suffix omp"]
+    else:
+        accelerator_cmds += ["package gpu 0 neigh no", "suffix gpu"]
+
+    return run_vars, out_dir, args.runs, accelerator_cmds
 
 
 def setup_tables(run_vars: RunVars, out_dir: Path) -> Tables:
@@ -274,22 +279,27 @@ def setup_tables(run_vars: RunVars, out_dir: Path) -> Tables:
 
 def set_lmp_run_vars(lmp: LammpsMPI, run_vars: RunVars):
     vars = run_vars.model_dump()
-    for key, value in vars.items():
-        match value:
-            case int() | float():
-                lmp.command(f"variable {key} equal {value}")
-            case None:
-                pass
-            case _:
-                lmp.command(f"variable {key} string {value}")
+    for key in vars.keys():
+        value = getattr(run_vars, key)
+        if isinstance(value, int) or isinstance(value, int):
+            lmp.command(f"variable {key} equal {value}")
+        elif isinstance(value, Vector3D):
+            for i in "xyz":
+                lmp.command(f"variable {key}_{i} equal {getattr(value, i)}")
+        elif value is not None:
+            lmp.command(f"variable {key} string {value}")
 
 
 def main(lmp: LammpsMPI) -> None:
     try:
-        run_vars, out_dir, tmp_dir, n_runs = process_args()
+        run_vars, out_dir, n_runs, accelerator_cmds = process_args()
     except SystemExit as e:
         print(e)
         return
+
+    tmp_dir: Path = out_dir / "tmp"
+    if not tmp_dir.exists():
+        tmp_dir.mkdir()
 
     tables = setup_tables(run_vars, out_dir)
     for run_num in range(run_vars.run_i, n_runs + 1):
@@ -334,26 +344,27 @@ def main(lmp: LammpsMPI) -> None:
             json.dump(json.loads(run_vars.model_dump_json()), f, indent=2)
 
         lmp.command(f"log {run_dir / "log.lammps"}")
+        lmp.commands_list(accelerator_cmds)
         set_lmp_run_vars(lmp, run_vars)
-        lmp.command("package gpu 0 neigh no")
-        lmp.command("suffix gpu")
         lmp.file("in.fall")
 
-        dump_final = Dump(dump_final_path)
+        dump_final = Dump(run_vars.dump_final)
         lammps_util.create_clusters_dump(
-            dump_final.name, dump_final.timesteps[0][0], dump_cluster_path
+            dump_final.name, dump_final.timesteps[0][0], run_vars.dump_cluster
         )
-        dump_cluster = Dump(dump_cluster_path)
+        dump_cluster = Dump(run_vars.dump_cluster)
 
         cluster_atoms_dict, rim_atoms = lammps_util.get_cluster_atoms_dict(dump_cluster)
         cluster_dict, carbon_sputtered = get_cluster_dict(cluster_atoms_dict)
 
         clusters_table = get_clusters_table(cluster_dict, run_num).astype(float)
-        rim_info = get_rim_info(rim_atoms, fu_x, fu_y, run_num, zero_lvl)
+        rim_info = get_rim_info(
+            rim_atoms, run_vars.cluster_position, run_num, run_vars.zero_lvl
+        )
 
         carbon = get_carbon(dump_final, carbon_sputtered)
-        carbon_hist = get_carbon_hist(carbon, zero_lvl)
-        carbon_info = get_carbon_info(carbon, fu_x, fu_y, run_num)
+        carbon_hist = get_carbon_hist(carbon, run_vars.zero_lvl)
+        carbon_info = get_carbon_info(carbon, run_vars.cluster_position, run_num)
 
         ids_to_delete: list[int] = []
         for atoms in cluster_atoms_dict.values():
@@ -362,16 +373,20 @@ def main(lmp: LammpsMPI) -> None:
 
         dump_final_no_cluster_path = run_dir / "dump.final_no_cluster"
         lammps_util.dump_delete_atoms(
-            dump_final_path, dump_final_no_cluster_path, ids_to_delete
+            run_vars.dump_final, dump_final_no_cluster_path, ids_to_delete
         )
         dump_final_no_cluster = Dump(dump_final_no_cluster_path)
         sigma = lammps_util.calc_surface(
-            dump_final_no_cluster, run_dir, lattice, zero_lvl, C60_WIDTH
+            dump_final_no_cluster,
+            run_dir,
+            run_vars.lattice,
+            run_vars.zero_lvl,
+            C60_WIDTH,
         )
         if IS_MULTIFALL:
             write_file_no_clusters = tmp_dir / "tmp_no_cluster.input.data"
             lammps_util.input_delete_atoms(
-                write_file, write_file_no_clusters, ids_to_delete
+                run_vars.output_file, write_file_no_clusters, ids_to_delete
             )
             input_file = write_file_no_clusters
         else:
@@ -382,17 +397,19 @@ def main(lmp: LammpsMPI) -> None:
             lammps_util.input_delete_atoms(
                 input_file,
                 input_file_no_block,
-                dump_init["id"][np.where(dump_init["z"] > zero_lvl + 10)],
+                dump_init["id"][np.where(dump_init["z"] > run_vars.zero_lvl + 10)],
             )
             lammps_util.create_crater_dump(
-                dump_crater_path,
+                run_vars.dump_crater,
                 dump_final_no_cluster,
                 input_file_no_block,
-                offset_x=crystal_x,
-                offset_y=crystal_y,
+                offset_x=run_vars.crystal_offset.x,
+                offset_y=run_vars.crystal_offset.y,
             )
-            dump_crater = Dump(dump_crater_path)
-            crater_info = lammps_util.get_crater_info(dump_crater, run_num, zero_lvl)
+            dump_crater = Dump(run_vars.dump_crater)
+            crater_info = lammps_util.get_crater_info(
+                dump_crater, run_num, run_vars.zero_lvl
+            )
             lammps_util.save_table(tables.crater, crater_info, mode="a")
 
         lammps_util.save_table(tables.clusters, clusters_table, mode="a")
