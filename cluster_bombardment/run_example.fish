@@ -8,7 +8,7 @@ set energy 8
 set temperature 0
 set cluster Ar12_60
 
-mpirun -n 1 $VIRTUAL_ENV/bin/python run.py \
+mpirun -n 4 $VIRTUAL_ENV/bin/python run.py \
     --omp-threads 4 \
     --temperature $temperature \
     --energy $energy \

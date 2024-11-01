@@ -1,5 +1,4 @@
 ### init ###
-clear
 units metal
 boundary p p m
 atom_modify map yes

@@ -344,6 +344,7 @@ def main(lmp: LammpsMPI) -> None:
             json.dump(json.loads(run_vars.model_dump_json()), f, indent=2)
 
         lmp.command(f"log {run_dir / "log.lammps"}")
+        lmp.command("clear")
         lmp.commands_list(accelerator_cmds)
         set_lmp_run_vars(lmp, run_vars)
         lmp.file("in.fall")
