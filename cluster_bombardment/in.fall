@@ -48,9 +48,17 @@ displace_atoms all move &
   ${crystal_offset_x} ${crystal_offset_y} ${crystal_offset_z} units box
 
 
+### save initial dump ###
+compute voro_vol Si voronoi/atom only_group
+dump dump_initial Si custom 1 ${dump_initial} id x y z type c_voro_vol[1]
+run 0
+undump dump_initial
+uncompute voro_vol
+
+
 ### C60 molecule ###
-read_data ${cluster_file} group C60 add append shift &
-  ${cluster_offset_x} ${cluster_offset_y} ${cluster_offset_z}
+read_data ${cluster_file} group C60 add append shift 0 0 0
+displace_atoms C60 move ${cluster_offset_x} ${cluster_offset_y} ${cluster_offset_z} units box
 balance 1.0 shift xyz 10 1.0
 
 
