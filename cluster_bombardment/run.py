@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 from pathlib import Path
@@ -90,7 +91,7 @@ class RunVars(BaseModel):
     dump_crater: Path
     dump_cluster: Path
     energy_file: Optional[Path] = None
-    cluster_xyz_file: Path = None
+    cluster_xyz_file: Path
 
     cluster_file: Path
     elstop_table: Path
@@ -222,6 +223,14 @@ def get_carbon_info(
 
     r = np.fromiter(map(radius, carbon), float)
     return np.array([[sim_num, len(carbon), r.mean(), r.max()]])
+
+
+def plot_cluser_xyz(path: Path):
+    data = np.loadtxt(path)
+    path = path.with_suffix(".png")
+    plt.scatter(data[:20, 1], data[:20, 3])
+    plt.savefig(path)
+    plt.close()
 
 
 def process_args() -> tuple[RunVars, Path, int, list[str]]:
@@ -371,6 +380,8 @@ def main(lmp: LammpsMPI) -> None:
         lmp.commands_list(accelerator_cmds)
         set_lmp_run_vars(lmp, run_vars)
         lmp.file("in.fall")
+
+        plot_cluser_xyz(run_vars.cluster_xyz_file)
 
         dump_final = Dump(run_vars.dump_final)
         lammps_util.create_clusters_dump(
