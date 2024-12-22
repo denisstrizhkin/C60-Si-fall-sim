@@ -58,7 +58,7 @@ uncompute voro_vol
 
 ### cluster molecule ###
 read_data ${cluster_file} group cluster add append shift 0 0 0
-displace_atoms cluster move ${cluster_offset_x} ${cluster_offset_y} ${cluster_offset_z} units box
+displace_atoms cluster move ${cluster_position_x} ${cluster_position_y} ${cluster_position_z} units box
 balance 1.0 shift xyz 10 1.0
 compute cluster_x cluster reduce ave x
 compute cluster_y cluster reduce ave y
@@ -97,7 +97,7 @@ fix fixed fixed setforce 0 0 0
 fix tbath thermostat temp/berendsen ${temperature} ${temperature} 0.001
 fix estop all electron/stopping 10.0 ${elstop_table} region estop
 fix dt dt_reset dt/reset 1 $(v_step/10) $(v_step) 0.1
-fix cluster_xyz cluster print 10 "$c_cluster_x $c_cluster_y $c_cluster_z" ${cluster_xyz} 
+fix cluster_xyz cluster print 10 "$(time) $(c_cluster_x) $(c_cluster_y) $(c_cluster_z)" screen no file ${cluster_xyz_file}
 
 
 ### dumps ###
