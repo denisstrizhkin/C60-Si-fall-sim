@@ -348,6 +348,8 @@ def main(lmp: LammpsMPI) -> None:
 
         if check_run_vars_field("crystal_offset"):
             run_vars.crystal_offset = Vector3D()
+            run_vars.crystal_offset.x = rnd_coord(run_vars.crystal_offset.x)
+            run_vars.crystal_offset.y = rnd_coord(run_vars.crystal_offset.y)
 
         backup_input_file: Path = run_dir / "input.data"
         if run_vars.input_file != backup_input_file:
