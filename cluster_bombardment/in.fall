@@ -56,10 +56,13 @@ undump dump_initial
 uncompute voro_vol
 
 
-### C60 molecule ###
-read_data ${cluster_file} group C60 add append shift 0 0 0
-displace_atoms C60 move ${cluster_offset_x} ${cluster_offset_y} ${cluster_offset_z} units box
+### cluster molecule ###
+read_data ${cluster_file} group cluster add append shift 0 0 0
+displace_atoms cluster move ${cluster_offset_x} ${cluster_offset_y} ${cluster_offset_z} units box
 balance 1.0 shift xyz 10 1.0
+compute cluster_x cluster reduce ave x
+compute cluster_y cluster reduce ave y
+compute cluster_z cluster reduce ave z
 
 
 ### groups ###
@@ -94,14 +97,15 @@ fix fixed fixed setforce 0 0 0
 fix tbath thermostat temp/berendsen ${temperature} ${temperature} 0.001
 fix estop all electron/stopping 10.0 ${elstop_table} region estop
 fix dt dt_reset dt/reset 1 $(v_step/10) $(v_step) 0.1
+fix cluster_xyz cluster print 10 "$c_cluster_x $c_cluster_y $c_cluster_z" ${cluster_xyz} 
 
 
 ### dumps ###
-# dump during C60 custom 10 ${dump_during} id type x y z vx vy vz c_atom_ke
+# dump during cluster custom 10 ${dump_during} id type x y z vx vy vz c_atom_ke
 
 
 ### run simulation ###
-velocity C60 set ${cluster_velocity_x} ${cluster_velocity_y} ${cluster_velocity_z} &
+velocity cluster set ${cluster_velocity_x} ${cluster_velocity_y} ${cluster_velocity_z} &
   sum yes units box
 
 label run_a
@@ -111,6 +115,7 @@ if "$(time) < 1" then "jump SELF run_a"
 unfix estop
 unfix dt
 group dt_reset delete
+unfix cluster_xyz
 
 thermo 20
 run $(v_run_time - 1000)

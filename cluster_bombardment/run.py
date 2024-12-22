@@ -90,6 +90,7 @@ class RunVars(BaseModel):
     dump_crater: Path
     dump_cluster: Path
     energy_file: Optional[Path] = None
+    cluster_xyz_file: Path = None
 
     cluster_file: Path
     elstop_table: Path
@@ -327,6 +328,7 @@ def main(lmp: LammpsMPI) -> None:
         run_vars.dump_final = run_dir / "dump.final"
         run_vars.dump_crater = run_dir / "dump.crater"
         run_vars.dump_cluster = run_dir / "dump.cluster"
+        run_vars.cluster_xyz_file = run_dir / "cluster_xyz.txt"
         run_vars.output_file = tmp_dir / "tmp.input.data"
 
         if check_run_vars_field("cluster_position"):
