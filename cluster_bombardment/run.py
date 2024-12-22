@@ -330,10 +330,14 @@ def main(lmp: LammpsMPI) -> None:
         run_vars.output_file = tmp_dir / "tmp.input.data"
 
         if check_run_vars_field("cluster_position"):
-            run_vars.cluster_position = Vector3D.model_validate(run_vars.cluster_offset)
             # run_vars.cluster_position.x = rnd_coord(run_vars.cluster_position.x)
             # run_vars.cluster_position.y = rnd_coord(run_vars.cluster_position.y)
-            run_vars.cluster_position.x = cos_2 * run_vars.cluster_position.z
+            run_vars.cluster_position = Vector3D(
+                x=run_vars.cluster_offset.x,
+                y=run_vars.cluster_offset.y,
+                z=run_vars.cluster_offset.z,
+            )
+            run_vars.cluster_position.x += cos_2 * run_vars.cluster_position.z
             run_vars.cluster_position.z *= cos_1
             run_vars.cluster_position.z += run_vars.zero_lvl
 
