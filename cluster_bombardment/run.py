@@ -40,6 +40,7 @@ class Arguments(BaseSettings, cli_parse_args=True):
     energy: float = Field(
         default=8, description="Set fall energy of the simulation. (keV)"
     )
+    angle: float = Field(default=0, description="Vector angle")
     runs: int = Field(default=1, description="Number of simulations to run.")
     run_time: int = Field(
         default=1000, description="Run simulation this amount of steps."
@@ -76,12 +77,14 @@ class RunVars(BaseModel):
 
     step: float = Field(default=1e-3)
     energy: float
+    angle: float
     temperature: float
     zero_lvl: float
     run_time: int
 
     input_file: Path
     output_file: Path
+    dump_initial: Path
     dump_final: Path
     dump_during: Path
     dump_crater: Path
@@ -242,6 +245,7 @@ def process_args() -> tuple[RunVars, Path, int, list[str]]:
     run_vars.elstop_table = Path(args.elstop_table)
     run_vars.temperature = args.temperature
     run_vars.energy = args.energy
+    run_vars.angle = args.angle
     run_vars.run_time = args.run_time
 
     accelerator_cmds: list[str] = []
@@ -302,6 +306,11 @@ def main(lmp: LammpsMPI) -> None:
         tmp_dir.mkdir()
 
     tables = setup_tables(run_vars, out_dir)
+    angle_1 = run_vars.angle
+    angle_2 = 90 - angle_1
+
+    cos_1 = np.cos(np.radians(angle_1))
+    cos_2 = np.cos(np.radians(angle_2))
     for run_num in range(run_vars.run_i, n_runs + 1):
         run_dir: Path = out_dir / f"run_{run_num}"
         if not run_dir.exists():
@@ -314,6 +323,7 @@ def main(lmp: LammpsMPI) -> None:
             return (not hasattr(run_vars, field_name)) or run_num != run_vars.run_i
 
         run_vars.dump_during = run_dir / "dump.during"
+        run_vars.dump_initial = run_dir / "dump.initial"
         run_vars.dump_final = run_dir / "dump.final"
         run_vars.dump_crater = run_dir / "dump.crater"
         run_vars.dump_cluster = run_dir / "dump.cluster"
@@ -321,15 +331,20 @@ def main(lmp: LammpsMPI) -> None:
 
         if check_run_vars_field("cluster_position"):
             run_vars.cluster_position = Vector3D.model_validate(run_vars.cluster_offset)
-            run_vars.cluster_position.x = rnd_coord(run_vars.cluster_position.x)
-            run_vars.cluster_position.y = rnd_coord(run_vars.cluster_position.y)
+            # run_vars.cluster_position.x = rnd_coord(run_vars.cluster_position.x)
+            # run_vars.cluster_position.y = rnd_coord(run_vars.cluster_position.y)
+            run_vars.cluster_position.x = cos_2 * run_vars.cluster_position.z
+            run_vars.cluster_position.z *= cos_1
+            run_vars.cluster_position.z += run_vars.zero_lvl
 
         if check_run_vars_field("cluster_velocity"):
             run_vars.cluster_velocity = Vector3D()
-            run_vars.cluster_velocity.z = (
+            vel = (
                 -np.sqrt(run_vars.energy * 1000 / CLUSTER_AMASS / CLUSTER_COUNT)
                 * 138.842
             )
+            run_vars.cluster_velocity.z = cos_1 * vel
+            run_vars.cluster_velocity.x = cos_2 * vel
 
         if check_run_vars_field("crystal_offset"):
             run_vars.crystal_offset = Vector3D()
@@ -393,31 +408,33 @@ def main(lmp: LammpsMPI) -> None:
                 run_vars.output_file, write_file_no_clusters, ids_to_delete
             )
             run_vars.input_file = write_file_no_clusters
-        else:
-            dump_init_path = run_vars.input_file.parent / "dump.input"
-            lammps_util.create_dump_from_input(lmp, run_vars.input_file, dump_init_path)
-            dump_init = Dump(dump_init_path)
-            input_file_no_block = run_vars.input_file.with_stem(run_vars.input_file.stem + "_no_block")
-            lammps_util.input_delete_atoms(
-                run_vars.input_file,
-                input_file_no_block,
-                dump_init["id"][
-                    np.where(dump_init["z"] > run_vars.zero_lvl + 10)
-                ].tolist(),
-            )
-            lammps_util.create_crater_dump(
-                lmp,
-                run_vars.dump_crater,
-                dump_final_no_cluster,
-                input_file_no_block,
-                offset_x=run_vars.crystal_offset.x,
-                offset_y=run_vars.crystal_offset.y,
-            )
-            dump_crater = Dump(run_vars.dump_crater)
-            crater_info = lammps_util.get_crater_info(
-                dump_crater, run_num, run_vars.zero_lvl
-            )
-            lammps_util.save_table(tables.crater, crater_info, mode="a")
+        # else:
+        # dump_init_path = run_vars.input_file.parent / "dump.input"
+        # lammps_util.create_dump_from_input(lmp, run_vars.input_file, dump_init_path)
+        # dump_init = Dump(dump_init_path)
+        # input_file_no_block = run_vars.input_file.with_stem(
+        #     run_vars.input_file.stem + "_no_block"
+        # )
+        # lammps_util.input_delete_atoms(
+        #     run_vars.input_file,
+        #     input_file_no_block,
+        #     dump_init["id"][
+        #         np.where(dump_init["z"] > run_vars.zero_lvl + 10)
+        #     ].tolist(),
+        # )
+        # lammps_util.create_crater_dump(
+        #     lmp,
+        #     run_vars.dump_crater,
+        #     dump_final_no_cluster,
+        #     input_file_no_block,
+        #     offset_x=run_vars.crystal_offset.x,
+        #     offset_y=run_vars.crystal_offset.y,
+        # )
+        # dump_crater = Dump(run_vars.dump_crater)
+        # crater_info = lammps_util.get_crater_info(
+        #     dump_crater, run_num, run_vars.zero_lvl
+        # )
+        # lammps_util.save_table(tables.crater, crater_info, mode="a")
 
         lammps_util.save_table(tables.clusters, clusters_table, mode="a")
         lammps_util.save_table(tables.rim, rim_info, mode="a")
