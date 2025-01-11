@@ -10,7 +10,7 @@
 2. **П.А. Карасев, К.П. Карасев, Д.А. Стрижкин, Е.Д. Федоренко, В.Е. Пуха, А.И. Титов**, “Модификация поверхности и распыление кремния при бомбардировке ионами С60”, Тезисы докладов XIV Международной конференции по актуальным проблемам физики, материаловедения, технологии и диагностики кремния, нанометровых структур и приборов на его основе КРЕМНИЙ 2022, с.42 [Link](https://www.isp.nsc.ru/upload/silicon2022/42.pdf)
 3. **П.А. Карасев, К.П. Карасев, Д.А. Стрижкин, Е.Д. Федоренко, В.Е. Пуха, А.И. Титов**, “Имплантация углерода и распыление при облучении кремния фуллеренами кэВ-ных энергий”, Тезисы докладов VIII Всероссийской конференции Физические и физико-химические основы ионной имплантации, 2022, c.66 [Link](https://implantation.unn.ru/wp-content/uploads/2022/11/%D0%A2%D0%B5%D0%B7%D0%B8%D1%81%D1%8B-%D1%81%D0%B1%D0%BE%D1%80%D0%BD%D0%B8%D0%BA-%D0%A4%D0%A4%D0%A5%D0%9E%D0%98%D0%98-2022.pdf)
 4. **К.П. Карасев, Д.А. Стрижкин, П.А. Карасев**, “Распыление и формирование рельефа на (100) поверхности кремния при падении иона С60”, Неделя науки ИЭиТ. материалы Всероссийской конференции, 2022, c.166 [Link](https://elibrary.ru/download/elibrary_49969942_38770120.pdf)
-5. **K. Karasev, D. Strizhkin and P. Karaseov**, "Convenient Way to Create an MD Model of a Hot Crystal with an Open Surface," 2022 International Conference on Electrical Engineering and Photonics (EExPolytech), 2022, p.242 [Link](https://ieeexplore.ieee.org/document/10318713)
+5. **K. Karasev, D. Strizhkin and P. Karaseov**, "Convenient Way to Create an MD Model of a Hot Crystal with an Open Surface," 2022 International Conference on Electrical Engineering and Photonics (EExPolytech), 2022, p.242 [Link](https://ieeexplore.ieee.org/document/9950888)
 
 ## 2023
 
