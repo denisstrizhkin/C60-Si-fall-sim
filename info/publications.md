@@ -33,4 +33,6 @@
 4. **П.А. Карасев, К.П. Карасев, Д.А. Стрижкин, Е.Д. Федоренко, В.Е. Пуха, А.И. Титов**, “Модификация поверхности кремния облучением ускоренными ионами С60”,
 тезисы докладов XV Международной конференции по актуальным проблемам физики, материаловедения, технологии и диагностики кремния, нанометровых структур
 и приборов на его основе КРЕМНИЙ 2024, с.35 [Link](https://elibrary.ru/download/elibrary_68585486_51992165.pdf)
+5. **Platon Karaseov, Kirill Karasev, Denis Strizhkin, Alexander Shakhmin, Vladimir Pukha**, "C60 ion beam as a tool to obtain functional nanostructured
+coating", RADIATION EFFECTS & DEFECTS IN SOLIDS, 2024, V.179, N.11–12, P.1552–1558 [Link](https://www.tandfonline.com/doi/full/10.1080/10420150.2024.2434509)
 
