@@ -4,7 +4,7 @@
 
 - [Тулиновская](http://tulinov.sinp.msu.ru/) 27 – 29 мая 2025.
   - дедлайн: 23 февраля 2025
-- [ВИП-2025](http://isi2021.uniyar.ac.ru/rus/first_rus.html) 25-29 августа 2025.
+- [ВИП-2025](http://isi2021.uniyar.ac.ru/rus/first_rus.html) 25 – 29 августа 2025.
   - дедлайн: 15 марта 2025
 
 ## 16.10.2024
