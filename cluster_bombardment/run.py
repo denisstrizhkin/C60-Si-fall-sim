@@ -228,10 +228,15 @@ def get_carbon_info(
 
 
 def plot_cluser_xyz(path: Path):
+    name = path.name
+    path_xz = path.with_name(f"{name}_xz").with_suffix(".png")
+    path_xy = path.with_name(f"{name}_xy").with_suffix(".png")
     data = np.loadtxt(path)
-    path = path.with_suffix(".png")
     plt.scatter(data[:, 1], data[:, 3])
-    plt.savefig(path)
+    plt.savefig(path_xz)
+    plt.close()
+    plt.scatter(data[:, 1], data[:, 2])
+    plt.savefig(path_xy)
     plt.close()
 
 
