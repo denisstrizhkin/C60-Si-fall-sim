@@ -41,7 +41,8 @@ class Arguments(BaseSettings, cli_parse_args=True):
     energy: float = Field(
         default=8, description="Set fall energy of the simulation. (keV)"
     )
-    angle: float = Field(default=0, description="Vector angle")
+    angle1: float = Field(default=0, description="Vector angle 1")
+    angle2: float = Field(default=0, description="Vector angle 2")
     runs: int = Field(default=1, description="Number of simulations to run.")
     run_time: int = Field(
         default=1000, description="Run simulation this amount of steps."
@@ -78,7 +79,8 @@ class RunVars(BaseModel):
 
     step: float = Field(default=1e-3)
     energy: float
-    angle: float
+    angle1: float
+    angle2: float
     temperature: float
     zero_lvl: float
     run_time: int
@@ -255,7 +257,8 @@ def process_args() -> tuple[RunVars, Path, int, list[str]]:
     run_vars.elstop_table = Path(args.elstop_table)
     run_vars.temperature = args.temperature
     run_vars.energy = args.energy
-    run_vars.angle = args.angle
+    run_vars.angle1 = args.angle1
+    run_vars.angle2 = args.angle2
     run_vars.run_time = args.run_time
 
     accelerator_cmds: list[str] = []
@@ -316,11 +319,11 @@ def main(lmp: LammpsMPI) -> None:
         tmp_dir.mkdir()
 
     tables = setup_tables(run_vars, out_dir)
-    angle_1 = run_vars.angle
-    angle_2 = 90 - angle_1
 
-    cos_1 = np.cos(np.radians(angle_1))
-    cos_2 = np.cos(np.radians(angle_2))
+    cos_1 = np.cos(np.radians(run_vars.angle1))
+    sin_1 = np.cos(np.radians(run_vars.angle1))
+    cos_2 = np.cos(np.radians(run_vars.angle2))
+    sin_2 = np.cos(np.radians(run_vars.angle2))
     for run_num in range(run_vars.run_i, n_runs + 1):
         run_dir: Path = out_dir / f"run_{run_num}"
         if not run_dir.exists():
@@ -348,7 +351,8 @@ def main(lmp: LammpsMPI) -> None:
                 y=run_vars.cluster_offset.y,
                 z=run_vars.cluster_offset.z,
             )
-            run_vars.cluster_position.x += cos_2 * run_vars.cluster_position.z
+            run_vars.cluster_position.x += run_vars.cluster_position.z * sin_1 * sin_2
+            run_vars.cluster_position.y += run_vars.cluster_position.z * sin_1 * cos_2
             run_vars.cluster_position.z *= cos_1
             run_vars.cluster_position.z += run_vars.zero_lvl
 
@@ -358,8 +362,9 @@ def main(lmp: LammpsMPI) -> None:
                 -np.sqrt(run_vars.energy * 1000 / CLUSTER_AMASS / CLUSTER_COUNT)
                 * 138.842
             )
-            run_vars.cluster_velocity.z = cos_1 * vel
-            run_vars.cluster_velocity.x = cos_2 * vel
+            run_vars.cluster_velocity.z = vel * cos_1
+            run_vars.cluster_velocity.x = vel * sin_1 * sin_2
+            run_vars.cluster_velocity.y = vel * sin_1 * cos_2
 
         if check_run_vars_field("crystal_offset"):
             run_vars.crystal_offset = Vector3D()
