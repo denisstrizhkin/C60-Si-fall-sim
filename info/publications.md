@@ -34,6 +34,7 @@
 тезисы докладов XV Международной конференции по актуальным проблемам физики, материаловедения, технологии и диагностики кремния, нанометровых структур
 и приборов на его основе КРЕМНИЙ 2024, с.35 [Link](https://elibrary.ru/download/elibrary_68585486_51992165.pdf)
 5. **К.П.Карасев, Д.А.Стрижкин, А.И.Титов, П.А.Карасев**, “Особенности распыления кремния кластерными ионами”, Физические и физико-химические основы ионной имплантации: Тезисы докладов IX Всероссийской конференции и школы молодых ученых и специалистов (Нижний Новгород, 22–25 октября 2024 г.). – Н. Новгород, 2024, c.20 [Link](https://implantation.unn.ru/wp-content/uploads/2024/10/%D0%A1%D0%B1%D0%BE%D1%80%D0%BD%D0%B8%D0%BA-%D1%82%D0%B5%D0%B7%D0%B8%D1%81%D0%BE%D0%B2-%D0%A4%D0%A4%D0%A5%D0%9E%D0%98%D0%98-2024.pdf)
-6. **Platon Karaseov, Kirill Karasev, Denis Strizhkin, Alexander Shakhmin, Vladimir Pukha**, “C60 ion beam as a tool to obtain functional nanostructured
+6. **Д.А. Стрижкин, К.П. Карасев, А.И.Титов, П.А. Карасев**, “Моделирование кумулятивного облучения кремния ионами С60”, Неделя науки ИЭиТ. материалы Всероссийской конференции, 2024, c.222 [Link](https://www.elibrary.ru/download/elibrary_77998692_13226907.pdf)
+7. **Platon Karaseov, Kirill Karasev, Denis Strizhkin, Alexander Shakhmin, Vladimir Pukha**, “C60 ion beam as a tool to obtain functional nanostructured
 coating”, RADIATION EFFECTS & DEFECTS IN SOLIDS, 2024, V.179, N.11–12, P.1552–1558 [Link](https://www.tandfonline.com/eprint/IDITRTEFSBBEKJXQMQPD/full?target=10.1080/10420150.2024.2434509)
 
