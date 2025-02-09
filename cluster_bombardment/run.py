@@ -356,8 +356,8 @@ def main(lmp: LammpsMPI) -> None:
                 y=run_vars.cluster_offset.y,
                 z=run_vars.cluster_offset.z,
             )
-            run_vars.cluster_position.x += run_vars.cluster_position.z * sin_1 * sin_2
-            run_vars.cluster_position.y += run_vars.cluster_position.z * sin_1 * cos_2
+            run_vars.cluster_position.x += run_vars.cluster_position.z * sin_1 * cos_2
+            run_vars.cluster_position.y += run_vars.cluster_position.z * sin_1 * sin_2
             run_vars.cluster_position.z *= cos_1
             run_vars.cluster_position.z += run_vars.zero_lvl
 
@@ -368,8 +368,8 @@ def main(lmp: LammpsMPI) -> None:
                 * 138.842
             )
             run_vars.cluster_velocity.z = vel * cos_1
-            run_vars.cluster_velocity.x = vel * sin_1 * sin_2
-            run_vars.cluster_velocity.y = vel * sin_1 * cos_2
+            run_vars.cluster_velocity.x = vel * sin_1 * cos_2
+            run_vars.cluster_velocity.y = vel * sin_1 * sin_2
 
         if check_run_vars_field("crystal_offset"):
             run_vars.crystal_offset = Vector3D()
