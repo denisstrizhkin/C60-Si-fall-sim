@@ -117,7 +117,7 @@ def write_header(header_str, table_path):
 
 
 def get_cluster_dict(
-    cluster_atoms_dict: dict[int, list[Atom]]
+    cluster_atoms_dict: dict[int, list[Atom]],
 ) -> tuple[dict[int, Cluster], set[int]]:
     cluster_dict = dict()
     carbon_sputtered = set()
@@ -228,7 +228,7 @@ def get_carbon_info(
 
 
 def plot_cluser_xyz(path: Path):
-    name = path.name
+    name = path.stem
     path_xz = path.with_name(f"{name}_xz").with_suffix(".png")
     path_xy = path.with_name(f"{name}_xy").with_suffix(".png")
     data = np.loadtxt(path)
@@ -326,9 +326,9 @@ def main(lmp: LammpsMPI) -> None:
     tables = setup_tables(run_vars, out_dir)
 
     cos_1 = np.cos(np.radians(run_vars.angle1))
-    sin_1 = np.cos(np.radians(run_vars.angle1))
+    sin_1 = np.sin(np.radians(run_vars.angle1))
     cos_2 = np.cos(np.radians(run_vars.angle2))
-    sin_2 = np.cos(np.radians(run_vars.angle2))
+    sin_2 = np.sin(np.radians(run_vars.angle2))
     for run_num in range(run_vars.run_i, n_runs + 1):
         run_dir: Path = out_dir / f"run_{run_num}"
         if not run_dir.exists():
