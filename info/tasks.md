@@ -6,6 +6,10 @@
   - дедлайн: 23 февраля 2025
 - [ВИП-2025](http://isi2021.uniyar.ac.ru/rus/first_rus.html) 25 – 29 августа 2025.
   - дедлайн: 15 марта 2025
+- [Неделя науки ФизМех](https://physmech.spbstu.ru/news/vserossiyskaya_konferenciya_nedelya_nauki_fizmeh_31_marta_4_aprelya_2025_goda/) 31 марта - 4 апреля
+  - дедлайн: 3 марта 2025 - краткие тезисы, 28 марта 2025 - расширенные тезисы
+- [ВИТТ Беларусь](https://vitt.bsu.by/) 22-25 сентября 2025.
+  - дедлайн: 10 июня 2025
 
 ## 16.10.2024
 - [ ] Дописать статью для Radiation Effects and Defects
