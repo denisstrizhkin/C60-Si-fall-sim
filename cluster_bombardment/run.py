@@ -1,13 +1,17 @@
 #!/usr/bin/env python
 
-import matplotlib.pyplot as plt
-import numpy as np
-import numpy.typing as npt
 from pathlib import Path
 import json
 import operator
 import shutil
 from typing import Optional
+import subprocess
+
+import matplotlib.pyplot as plt
+import numpy as np
+import numpy.typing as npt
+from pydantic import BaseModel, Field, ConfigDict
+from pydantic_settings import BaseSettings
 
 import lammps_util
 from lammps_util import Dump, Atom, Cluster
@@ -15,8 +19,6 @@ from lammps_util import Dump, Atom, Cluster
 import lammps_mpi4py
 from lammps_mpi4py import LammpsMPI
 
-from pydantic import BaseModel, Field, ConfigDict
-from pydantic_settings import BaseSettings
 
 SI_ATOM_TYPE: int = 1
 C_ATOM_TYPE: int = 2
@@ -388,17 +390,22 @@ def main(lmp: LammpsMPI) -> None:
 
         if IS_MULTIFALL:
             write_file_no_clusters = tmp_dir / "tmp_no_cluster.input.data"
-            # TODO delete atoms with rust
-            lammps_util.input_delete_atoms(
-                run_vars.output_file, write_file_no_clusters, ids_to_delete
+            subprocess.run(
+                [
+                    "remove_sputtered",
+                    str(run_vars.input_file),
+                    str(run_vars.dump_final),
+                    str(write_file_no_clusters),
+                ],
+                check=True,
             )
             run_vars.input_file = write_file_no_clusters
 
     # TODO run rust analyzers
-    lammps_util.clusters_parse(tables.clusters, n_runs)
-    lammps_util.clusters_parse_sum(tables.clusters, n_runs)
-    lammps_util.clusters_parse_angle_dist(tables.clusters, n_runs)
-    lammps_util.carbon_dist_parse(tables.carbon_dist)
+    # lammps_util.clusters_parse(tables.clusters, n_runs)
+    # lammps_util.clusters_parse_sum(tables.clusters, n_runs)
+    # lammps_util.clusters_parse_angle_dist(tables.clusters, n_runs)
+    # lammps_util.carbon_dist_parse(tables.carbon_dist)
 
 
 if __name__ == "__main__":
