@@ -12,7 +12,7 @@ from typing import Optional
 import lammps_util
 from lammps_util import Dump, Atom, Cluster
 
-from mpi4py import MPI
+import lammps_mpi4py
 from lammps_mpi4py import LammpsMPI
 
 from pydantic import BaseModel, Field, ConfigDict
@@ -90,8 +90,6 @@ class RunVars(BaseModel):
     dump_initial: Path
     dump_final: Path
     dump_during: Path
-    dump_crater: Path
-    dump_cluster: Path
     energy_file: Optional[Path] = None
     cluster_xyz_file: Path
 
@@ -105,7 +103,6 @@ class Tables(BaseModel):
     sputter_count: Path
     carbon: Path
     carbon_dist: Path
-    crater: Path
     rim: Path
     surface: Path
     coord_num: Path
@@ -281,7 +278,6 @@ def setup_tables(run_vars: RunVars, out_dir: Path) -> Tables:
         sputter_count=out_dir / "sputter_count_table.txt",
         carbon=out_dir / "carbon_table.txt",
         carbon_dist=out_dir / "carbon_dist.txt",
-        crater=out_dir / "crater_table.txt",
         rim=out_dir / "rim_table.txt",
         surface=out_dir / "surface_table.txt",
         coord_num=out_dir / "coord_num_table.txt",
@@ -291,7 +287,6 @@ def setup_tables(run_vars: RunVars, out_dir: Path) -> Tables:
         write_header("sim_num N_Si N_C mass Px Py Pz Ek angle", tables.clusters)
         write_header("sim_num N r_mean r_max", tables.carbon)
         write_header("z count", tables.carbon_dist)
-        write_header("sim_num N V S z_mean z_min", tables.crater)
         write_header("sim_num N r_mean r_max z_mean z_max", tables.rim)
         write_header("sim_num sigma", tables.surface)
         write_header("sim_num N_Si N_C N_Sum", tables.coord_num)
@@ -343,8 +338,6 @@ def main(lmp: LammpsMPI) -> None:
         run_vars.dump_during = run_dir / "dump.during"
         run_vars.dump_initial = run_dir / "dump.initial"
         run_vars.dump_final = run_dir / "dump.final"
-        run_vars.dump_crater = run_dir / "dump.crater"
-        run_vars.dump_cluster = run_dir / "dump.cluster"
         run_vars.cluster_xyz_file = run_dir / "cluster_xyz.txt"
         run_vars.output_file = tmp_dir / "tmp.input.data"
 
@@ -393,86 +386,15 @@ def main(lmp: LammpsMPI) -> None:
 
         plot_cluser_xyz(run_vars.cluster_xyz_file)
 
-        dump_final = Dump(run_vars.dump_final)
-        lammps_util.create_clusters_dump(
-            lmp,
-            Path(dump_final.name),
-            dump_final.timesteps[0][0],
-            run_vars.dump_cluster,
-        )
-        dump_cluster = Dump(run_vars.dump_cluster)
-
-        cluster_atoms_dict, rim_atoms = lammps_util.get_cluster_atoms_dict(dump_cluster)
-        cluster_dict, carbon_sputtered = get_cluster_dict(cluster_atoms_dict)
-
-        clusters_table = get_clusters_table(cluster_dict, run_num).astype(float)
-        rim_info = get_rim_info(
-            rim_atoms, run_vars.cluster_position, run_num, run_vars.zero_lvl
-        )
-
-        carbon = get_carbon(dump_final, carbon_sputtered)
-        carbon_hist = get_carbon_hist(carbon, run_vars.zero_lvl)
-        carbon_info = get_carbon_info(carbon, run_vars.cluster_position, run_num)
-
-        ids_to_delete: list[int] = []
-        for atoms in cluster_atoms_dict.values():
-            for atom in atoms:
-                ids_to_delete.append(atom.id)
-
-        dump_final_no_cluster_path = run_dir / "dump.final_no_cluster"
-        lammps_util.dump_delete_atoms(
-            run_vars.dump_final, dump_final_no_cluster_path, ids_to_delete
-        )
-        dump_final_no_cluster = Dump(dump_final_no_cluster_path)
-        sigma = lammps_util.calc_surface(
-            dump_final_no_cluster,
-            run_dir,
-            run_vars.lattice,
-            run_vars.zero_lvl,
-            C60_WIDTH,
-        )
         if IS_MULTIFALL:
             write_file_no_clusters = tmp_dir / "tmp_no_cluster.input.data"
+            # TODO delete atoms with rust
             lammps_util.input_delete_atoms(
                 run_vars.output_file, write_file_no_clusters, ids_to_delete
             )
             run_vars.input_file = write_file_no_clusters
-        # else:
-        # dump_init_path = run_vars.input_file.parent / "dump.input"
-        # lammps_util.create_dump_from_input(lmp, run_vars.input_file, dump_init_path)
-        # dump_init = Dump(dump_init_path)
-        # input_file_no_block = run_vars.input_file.with_stem(
-        #     run_vars.input_file.stem + "_no_block"
-        # )
-        # lammps_util.input_delete_atoms(
-        #     run_vars.input_file,
-        #     input_file_no_block,
-        #     dump_init["id"][
-        #         np.where(dump_init["z"] > run_vars.zero_lvl + 10)
-        #     ].tolist(),
-        # )
-        # lammps_util.create_crater_dump(
-        #     lmp,
-        #     run_vars.dump_crater,
-        #     dump_final_no_cluster,
-        #     input_file_no_block,
-        #     offset_x=run_vars.crystal_offset.x,
-        #     offset_y=run_vars.crystal_offset.y,
-        # )
-        # dump_crater = Dump(run_vars.dump_crater)
-        # crater_info = lammps_util.get_crater_info(
-        #     dump_crater, run_num, run_vars.zero_lvl
-        # )
-        # lammps_util.save_table(tables.crater, crater_info, mode="a")
 
-        lammps_util.save_table(tables.clusters, clusters_table, mode="a")
-        lammps_util.save_table(tables.rim, rim_info, mode="a")
-        lammps_util.save_table(
-            tables.carbon_dist, carbon_hist, header=str(run_num), mode="a"
-        )
-        lammps_util.save_table(tables.carbon, carbon_info, mode="a")
-        lammps_util.save_table(tables.surface, [[run_num, sigma]], mode="a")
-
+    # TODO run rust analyzers
     lammps_util.clusters_parse(tables.clusters, n_runs)
     lammps_util.clusters_parse_sum(tables.clusters, n_runs)
     lammps_util.clusters_parse_angle_dist(tables.clusters, n_runs)
@@ -480,11 +402,4 @@ def main(lmp: LammpsMPI) -> None:
 
 
 if __name__ == "__main__":
-    comm = MPI.COMM_WORLD
-    lmp = LammpsMPI(comm, 0)
-    if comm.Get_rank() == 0:
-        main(lmp)
-        print("*** FINISHED COMPLETELY ***")
-        lmp.close()
-    else:
-        lmp.listen()
+    lammps_mpi4py.run(main)
