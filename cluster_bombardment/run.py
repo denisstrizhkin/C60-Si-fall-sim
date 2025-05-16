@@ -392,10 +392,10 @@ def main(lmp: LammpsMPI) -> None:
             write_file_no_clusters = tmp_dir / "tmp_no_cluster.input.data"
             subprocess.run(
                 [
-                    "remove_sputtered",
-                    str(run_vars.input_file),
-                    str(run_vars.dump_final),
-                    str(write_file_no_clusters),
+                    shutil.which("remove-sputtered"),
+                    run_vars.output_file,
+                    run_vars.dump_final,
+                    write_file_no_clusters,
                 ],
                 check=True,
             )

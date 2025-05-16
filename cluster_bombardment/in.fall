@@ -50,7 +50,7 @@ displace_atoms all move &
 
 ### save initial dump ###
 compute voro_vol Si voronoi/atom only_group
-dump dump_initial Si custom 1 ${dump_initial} id x y z type c_voro_vol[1]
+dump dump_initial all custom 1 ${dump_initial} id x y z type c_voro_vol[1]
 run 0
 undump dump_initial
 uncompute voro_vol
@@ -68,8 +68,8 @@ compute cluster_z cluster reduce ave z
 ### groups ###
 group C type 2
 group fixed region fixed 
-group thermostat dynamic all region thermostat every 1
-group dt_reset dynamic all region dt_reset every 10
+group thermostat dynamic all region thermostat every 10
+group dt_reset region dt_reset
 
 
 ### computes ###
@@ -96,7 +96,7 @@ fix nve all nve
 fix fixed fixed setforce 0 0 0
 fix tbath thermostat temp/berendsen ${temperature} ${temperature} 0.001
 fix estop all electron/stopping 10.0 ${elstop_table} region estop
-fix dt dt_reset dt/reset 1 $(v_step/10) $(v_step) 0.1
+fix dt dt_reset dt/reset 10 $(v_step/10) $(v_step) 0.1
 fix cluster_xyz cluster print 10 "$(time) $(c_cluster_x) $(c_cluster_y) $(c_cluster_z)" screen no file ${cluster_xyz_file}
 
 
@@ -120,7 +120,14 @@ unfix cluster_xyz
 thermo 20
 run $(v_run_time - 1000)
  
-dump final all custom 1 ${dump_final} id x y z vx vy vz type c_atom_ke
-run 0
+write_dump all custom ${dump_final} id x y z vx vy vz type mass c_atom_ke
+
+unfix tbath
+fix tbath all temp/berendsen ${temperature} ${temperature} 0.001
+run 1000
+
+unfix tbath
+fix tbath thermostat temp/berendsen ${temperature} ${temperature} 0.001
+run 2000
 
 write_data ${output_file}
