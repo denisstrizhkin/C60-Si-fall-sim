@@ -13,10 +13,10 @@ variable thermostat_zhi equal 'v_fixed_zhi + v_lattice'
 ### regions ###
 lattice diamond ${lattice} orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
 
-region fixed      block EDGE EDGE EDGE EDGE EDGE         ${fixed_zhi}      units box
+region nve        block EDGE EDGE EDGE EDGE EDGE         ${fixed_zhi}      units box side out
 region thermostat block EDGE EDGE EDGE EDGE ${fixed_zhi} ${thermostat_zhi} units box
 
-region dt_reset block EDGE EDGE EDGE EDGE EDGE EDGE                units box
+region dt_reset block EDGE EDGE EDGE EDGE EDGE $(v_zero_lvl + 25)  units box
 region estop    block EDGE EDGE EDGE EDGE EDGE $(v_zero_lvl + 0.5) units box
 
 
@@ -67,9 +67,9 @@ compute cluster_z cluster reduce ave z
 
 ### groups ###
 group C type 2
-group fixed region fixed 
+group nve dynamic all region nve every 10
 group thermostat dynamic all region thermostat every 10
-group dt_reset region dt_reset
+group dt_reset dynamic all region dt_reset every 10
 
 
 ### computes ###
@@ -92,8 +92,7 @@ thermo_style custom step pe ke etotal temp c_vacancies dt time
 
 ### fixes ###
 fix balance all balance 100 1.0 shift xyz 10 1.0
-fix nve all nve
-fix fixed fixed setforce 0 0 0
+fix nve nve nve
 fix tbath thermostat temp/berendsen ${temperature} ${temperature} 0.001
 fix estop all electron/stopping 10.0 ${elstop_table} region estop
 fix dt dt_reset dt/reset 10 $(v_step/10) $(v_step) 0.1
