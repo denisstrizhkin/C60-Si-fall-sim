@@ -1,23 +1,17 @@
 #!/usr/bin/env python
 
+from typing import Optional, Annotated, TypeVar, Type
 from pathlib import Path
 import json
-import operator
 import shutil
-from typing import Optional
 import subprocess
 
 import matplotlib.pyplot as plt
 import numpy as np
-import numpy.typing as npt
 from pydantic import BaseModel, Field, ConfigDict
-from pydantic_settings import BaseSettings
-
-import lammps_util
-from lammps_util import Dump, Atom, Cluster
+import typer
 
 import lammps_mpi4py
-from lammps_mpi4py import LammpsMPI
 
 
 SI_ATOM_TYPE: int = 1
@@ -27,38 +21,6 @@ IS_MULTIFALL: bool = False
 C60_WIDTH: int = 20
 CLUSTER_AMASS: float = 12.011
 CLUSTER_COUNT: int = 60
-
-
-def hyphenize(field: str):
-    return field.replace("_", "-")
-
-
-class Arguments(BaseSettings, cli_parse_args=True):
-    class Config:
-        alias_generator = hyphenize
-
-    temperature: float = Field(
-        default=1e6, description="Set temperature of the simulation. (K)"
-    )
-    energy: float = Field(
-        default=8, description="Set fall energy of the simulation. (keV)"
-    )
-    angle1: float = Field(default=0, description="Vector angle 1")
-    angle2: float = Field(default=0, description="Vector angle 2")
-    runs: int = Field(default=1, description="Number of simulations to run.")
-    run_time: int = Field(
-        default=1000, description="Run simulation this amount of steps."
-    )
-    omp_threads: int = Field(
-        default=2, description="Set number of OpenMP threads. (if set to 0 use GPU)"
-    )
-    results_dir: str = Field(
-        description="Set directory path where to store computational results."
-    )
-    input_file: str = Field(description="Set input file.")
-    input_vars: Optional[str] = Field(default=None, description="Set input vars.")
-    cluster_file: str = Field(description="Set cluster file.")
-    elstop_table: str = Field(description="Set electron stopping table file.")
 
 
 class Vector3D(BaseModel):
@@ -100,130 +62,256 @@ class RunVars(BaseModel):
     graphene_data: Optional[str] = None
 
 
-class Tables(BaseModel):
-    clusters: Path
-    sputter_count: Path
-    carbon: Path
-    carbon_dist: Path
-    rim: Path
-    surface: Path
-    coord_num: Path
+class State(BaseModel):
+    run_vars: RunVars
+    is_mutifall: bool
 
 
-def write_header(header_str, table_path):
-    with open(table_path, "w", encoding="utf-8") as f:
-        f.write("# " + header_str + "\n")
+T = TypeVar("T", bound=BaseModel)
 
 
-def get_cluster_dict(
-    cluster_atoms_dict: dict[int, list[Atom]],
-) -> tuple[dict[int, Cluster], set[int]]:
-    cluster_dict = dict()
-    carbon_sputtered = set()
-
-    for cid, atoms in cluster_atoms_dict.items():
-        for atom in atoms:
-            if atom.type == C_ATOM_TYPE:
-                carbon_sputtered.add(atom.id)
-        cluster_dict[cid] = Cluster(atoms, SI_ATOM_TYPE)
-
-    return cluster_dict, carbon_sputtered
+def save_model(model: T, path: Path):
+    with open(path, mode="w") as f:
+        json.dump(json.loads(model.model_dump_json()), f, indent=2)
 
 
-def get_clusters_table(cluster_dic, sim_num):
-    table = np.array([])
+def load_model(path: Path, model_class: Type[T]) -> T:
+    with open(path, mode="r") as f:
+        return model_class.model_construct(json.load(f))
 
-    for key in cluster_dic.keys():
-        cluster = cluster_dic[key]
-        table = np.concatenate(
-            (
-                table,
-                np.array(
-                    [
-                        sim_num,
-                        cluster.count_si,
-                        cluster.count_c,
-                        cluster.mass,
-                        cluster.mx,
-                        cluster.my,
-                        cluster.mz,
-                        cluster.ek,
-                        cluster.angle,
-                    ]
-                ),
+
+cli = typer.Typer()
+
+
+@cli.command()
+def rerun(
+    results_dir: Path,
+    runs=Annotated[
+        int, typer.Option(default=1, help="Number of simulations to run.")
+    ],
+    is_multifall=Annotated[
+        bool,
+        typer.Option(
+            default=False,
+        ),
+    ],
+    n_run: Optional[int] = None,
+    omp_threads=Annotated[
+        int,
+        typer.Option(
+            default=2,
+            help="Set number of OpenMP threads. (if set to 0 use GPU)",
+        ),
+    ],
+):
+    state = load_model(results_dir / "state.json", State)
+    app = App(
+        results_dir, state.run_vars, runs, state.is_mutifall, omp_threads
+    )
+    lammps_mpi4py.run(app)
+
+
+@cli.command()
+def run(
+    temperature=Annotated[
+        float,
+        typer.Option(
+            default=1e6, help="Set temperature of the simulation. (K)"
+        ),
+    ],
+    energy=Annotated[
+        float,
+        typer.Option(
+            default=8, help="Set fall energy of the simulation. (keV)"
+        ),
+    ],
+    angle1=Annotated[float, typer.Option(default=0.0, help="Vector angle 1")],
+    angle2=Annotated[float, typer.Option(default=0.0, help="Vector angle 2")],
+    runs=Annotated[
+        int, typer.Option(default=1, help="Number of simulations to run.")
+    ],
+    is_multifall=Annotated[
+        bool,
+        typer.Option(
+            default=False,
+        ),
+    ],
+    run_time=Annotated[
+        int,
+        typer.Option(
+            default=1000, help="Run simulation this amount of steps."
+        ),
+    ],
+    omp_threads=Annotated[
+        int,
+        typer.Option(
+            default=2,
+            help="Set number of OpenMP threads. (if set to 0 use GPU)",
+        ),
+    ],
+    results_dir=Annotated[
+        Path,
+        typer.Option(
+            help="Set directory path where to store computational results."
+        ),
+    ],
+    input_file=Annotated[Path, typer.Option(help="Set input file.")],
+    cluster_file=Annotated[Path, typer.Option(help="Set cluster file.")],
+    elstop_table=Annotated[
+        Path, typer.Option(help="Set electron stopping table file.")
+    ],
+):
+    run_vars = RunVars.model_construct(
+        zero_lvl=82.7813,
+        input_file=input_file,
+        cluster_file=cluster_file,
+        elstop_table=elstop_table,
+        temperature=temperature,
+        energy=energy,
+        angle1=angle1,
+        angle2=angle2,
+        run_time=run_time,
+    )
+
+    app = App(results_dir, run_vars, runs, is_multifall, omp_threads)
+    lammps_mpi4py.run(app)
+
+
+def get_accelerator_cmds(omp_threads: int) -> list[str]:
+    accelerator_cmds: list[str] = []
+    if omp_threads > 0:
+        accelerator_cmds += [f"package omp {omp_threads}", "suffix omp"]
+    else:
+        accelerator_cmds += ["package gpu 0 neigh no", "suffix gpu"]
+
+
+class App:
+    def __init__(
+        self,
+        results_dir: Path,
+        run_vars: RunVars,
+        n_runs: int,
+        is_multifall: bool,
+        omp_threads: int,
+    ):
+        self._out_dir = results_dir
+        if not self._out_dir.exists():
+            self._out_dir.mkdir()
+        self._tmp_dir = self._out_dir / "tmp"
+        if not self._tmp_dir.exists():
+            self._tmp_dir.mkdir()
+        self._run_vars = run_vars
+        self._n_runs = n_runs
+        self._is_mutifall = is_multifall
+        self._accelerator_cmds = get_accelerator_cmds(omp_threads)
+
+    def __call__(self, lmp: lammps_mpi4py.LammpsMPI):
+        while self._run_vars.run_i < self._n_runs + 1:
+            self._run(lmp)
+            self._run_vars.run_i += 1
+
+            state = State(
+                run_vars=self._run_vars, is_multifall=self._is_mutifall
             )
-        )
+            save_model(state, self._out_dir / "state.json")
 
-    return table.reshape((table.shape[0] // 9, 9))
+    def _run(self, lmp: lammps_mpi4py.LammpsMPI, run_num: int):
+        cos_1 = np.cos(np.radians(self._run_vars.angle1))
+        sin_1 = np.sin(np.radians(self._run_vars.angle1))
+        cos_2 = np.cos(np.radians(self._run_vars.angle2))
+        sin_2 = np.sin(np.radians(self._run_vars.angle2))
 
+        run_dir: Path = self._out_dir / f"run_{run_num}"
+        if not run_dir.exists():
+            run_dir.mkdir()
 
-def get_rim_info(
-    rim_atoms: list[Atom], cluster_pos: Vector3D, sim_num: int, zero_lvl: float
-) -> np.ndarray:
-    if len(rim_atoms) == 0:
-        return np.array([])
+        def rnd_coord(offset: float) -> float:
+            return (
+                offset
+                + (np.random.rand() * 2 - 1)
+                * self._run_vars.lattice
+                * C60_WIDTH
+            )
 
-    def radius(atom: Atom) -> float:
-        dx = atom.x - cluster_pos.x
-        dy = atom.y - cluster_pos.y
-        return np.sqrt(dx**2 + dy**2)
+        def check_run_vars_field(field_name: str) -> bool:
+            return not hasattr(run_vars, field_name)
 
-    r = np.fromiter(map(radius, rim_atoms), float)
-    z = np.fromiter(map(operator.attrgetter("z"), rim_atoms), float)
+        self._run_vars.dump_during = run_dir / "dump.during"
+        self._run_vars.dump_initial = run_dir / "dump.initial"
+        self._run_vars.dump_final = run_dir / "dump.final"
+        self._run_vars.cluster_xyz_file = run_dir / "cluster_xyz.txt"
+        self._run_vars.output_file = self._tmp_dir / "tmp.input.data"
 
-    return np.array(
-        [
-            sim_num,
-            len(rim_atoms),
-            r.mean(),
-            r.max(),
-            z.mean() - zero_lvl,
-            z.max() - zero_lvl,
-        ]
-    )
+        if check_run_vars_field("cluster_position"):
+            # self._run_vars.cluster_position.x = rnd_coord(self._run_vars.cluster_position.x)
+            # self._run_vars.cluster_position.y = rnd_coord(self._run_vars.cluster_position.y)
+            self._run_vars.cluster_position = Vector3D(
+                x=self._run_vars.cluster_offset.x,
+                y=self._run_vars.cluster_offset.y,
+                z=self._run_vars.cluster_offset.z,
+            )
+            self._run_vars.cluster_position.x += (
+                self._run_vars.cluster_position.z * sin_1 * cos_2
+            )
+            self._run_vars.cluster_position.y += (
+                self._run_vars.cluster_position.z * sin_1 * sin_2
+            )
+            self._run_vars.cluster_position.z *= cos_1
+            self._run_vars.cluster_position.z += self._run_vars.zero_lvl
 
+        if check_run_vars_field("cluster_velocity"):
+            self._run_vars.cluster_velocity = Vector3D()
+            vel = (
+                -np.sqrt(
+                    self._run_vars.energy
+                    * 1000
+                    / CLUSTER_AMASS
+                    / CLUSTER_COUNT
+                )
+                * 138.842
+            )
+            self._run_vars.cluster_velocity.z = vel * cos_1
+            self._run_vars.cluster_velocity.x = vel * sin_1 * cos_2
+            self._run_vars.cluster_velocity.y = vel * sin_1 * sin_2
 
-def get_carbon(dump_final: Dump, carbon_sputtered: set[int]) -> list[Atom]:
-    x = dump_final["x"]
-    y = dump_final["y"]
-    z = dump_final["z"]
-    id = dump_final["id"]
-    type = dump_final["type"]
+        if check_run_vars_field("crystal_offset"):
+            self._run_vars.crystal_offset = Vector3D()
+            self._run_vars.crystal_offset.x = rnd_coord(
+                self._run_vars.crystal_offset.x
+            )
+            self._run_vars.crystal_offset.y = rnd_coord(
+                self._run_vars.crystal_offset.y
+            )
 
-    carbon: list[Atom] = []
-    for i, atom_id in enumerate(id):
-        if atom_id not in carbon_sputtered and type[i] == C_ATOM_TYPE:
-            carbon.append(Atom(x=x[i], y=y[i], z=z[i], id=atom_id))
+        backup_input_file: Path = run_dir / "input.data"
+        if self._run_vars.input_file != backup_input_file:
+            shutil.copy(self._run_vars.input_file, backup_input_file)
+        self._run_vars.input_file = backup_input_file
 
-    return carbon
+        run_vars = RunVars.model_validate(self._run_vars)
+        save_model(run_vars, run_dir / "vars.json")
 
+        lmp.command(f"log {run_dir / "log.lammps"}")
+        lmp.command("clear")
+        lmp.commands_list(self._accelerator_cmds)
+        set_lmp_run_vars(lmp, run_vars)
+        lmp.file("in.fall")
+        plot_cluser_xyz(self._run_vars.cluster_xyz_file)
 
-def get_carbon_hist(carbon: list[Atom], zero_lvl: float) -> npt.NDArray[np.float64]:
-    z_coords = np.fromiter(map(operator.attrgetter("z"), carbon), float)
-    if len(z_coords) == 0:
-        return np.asarray([[-0.5, 0.0], [0.5, 0.0]])
-    z_coords = np.around(z_coords - zero_lvl, 1)
-    right = int(np.ceil(z_coords.max())) + 1
-    left = int(np.floor(z_coords.min())) - 1
-    hist, bins = np.histogram(z_coords, bins=(right - left), range=(left, right))
-    length = len(hist)
-    hist = np.concatenate(
-        ((bins[1:] - 0.5).reshape(length, 1), hist.reshape(length, 1)), axis=1
-    )
-    return hist
-
-
-def get_carbon_info(
-    carbon: list[Atom], cluster_pos: Vector3D, sim_num: int
-) -> npt.NDArray[np.float64]:
-    if len(carbon) == 0:
-        return np.array([])
-
-    def radius(atom: Atom) -> float:
-        return np.sqrt((atom.x - cluster_pos.x) ** 2 + (atom.y - cluster_pos.y) ** 2)
-
-    r = np.fromiter(map(radius, carbon), float)
-    return np.array([[sim_num, len(carbon), r.mean(), r.max()]])
+        if IS_MULTIFALL:
+            write_file_no_clusters = (
+                self._tmp_dir / "tmp_no_cluster.input.data"
+            )
+            subprocess.run(
+                [
+                    shutil.which("remove-sputtered"),
+                    self._run_vars.output_file,
+                    self._run_vars.dump_final,
+                    write_file_no_clusters,
+                ],
+                check=True,
+            )
+            self._run_vars.input_file = write_file_no_clusters
 
 
 def plot_cluser_xyz(path: Path):
@@ -239,64 +327,7 @@ def plot_cluser_xyz(path: Path):
     plt.close()
 
 
-def process_args() -> tuple[RunVars, Path, int, list[str]]:
-    args = Arguments()
-
-    out_dir: Path = Path(args.results_dir)
-    if not out_dir.exists():
-        out_dir.mkdir()
-
-    lammps_util.setup_root_logger(out_dir / "run.log")
-
-    run_vars: RunVars
-    if args.input_vars is not None:
-        with open(args.input_vars, mode="r") as f:
-            run_vars = RunVars.model_construct(json.load(f))
-    else:
-        run_vars = RunVars.model_construct(
-            zero_lvl=82.7813, input_file=Path(args.input_file)
-        )
-
-    run_vars.cluster_file = Path(args.cluster_file)
-    run_vars.elstop_table = Path(args.elstop_table)
-    run_vars.temperature = args.temperature
-    run_vars.energy = args.energy
-    run_vars.angle1 = args.angle1
-    run_vars.angle2 = args.angle2
-    run_vars.run_time = args.run_time
-
-    accelerator_cmds: list[str] = []
-    if args.omp_threads > 0:
-        accelerator_cmds += [f"package omp {args.omp_threads}", "suffix omp"]
-    else:
-        accelerator_cmds += ["package gpu 0 neigh no", "suffix gpu"]
-
-    return run_vars, out_dir, args.runs, accelerator_cmds
-
-
-def setup_tables(run_vars: RunVars, out_dir: Path) -> Tables:
-    tables = Tables(
-        clusters=out_dir / "clusters_table.txt",
-        sputter_count=out_dir / "sputter_count_table.txt",
-        carbon=out_dir / "carbon_table.txt",
-        carbon_dist=out_dir / "carbon_dist.txt",
-        rim=out_dir / "rim_table.txt",
-        surface=out_dir / "surface_table.txt",
-        coord_num=out_dir / "coord_num_table.txt",
-    )
-
-    if run_vars.run_i == 1:
-        write_header("sim_num N_Si N_C mass Px Py Pz Ek angle", tables.clusters)
-        write_header("sim_num N r_mean r_max", tables.carbon)
-        write_header("z count", tables.carbon_dist)
-        write_header("sim_num N r_mean r_max z_mean z_max", tables.rim)
-        write_header("sim_num sigma", tables.surface)
-        write_header("sim_num N_Si N_C N_Sum", tables.coord_num)
-
-    return tables
-
-
-def set_lmp_run_vars(lmp: LammpsMPI, run_vars: RunVars):
+def set_lmp_run_vars(lmp: lammps_mpi4py.LammpsMPI, run_vars: RunVars):
     vars = run_vars.model_dump()
     for key in vars.keys():
         value = getattr(run_vars, key)
@@ -309,104 +340,5 @@ def set_lmp_run_vars(lmp: LammpsMPI, run_vars: RunVars):
             lmp.command(f"variable {key} string {value}")
 
 
-def main(lmp: LammpsMPI) -> None:
-    try:
-        run_vars, out_dir, n_runs, accelerator_cmds = process_args()
-    except SystemExit as e:
-        print(e)
-        return
-
-    tmp_dir: Path = out_dir / "tmp"
-    if not tmp_dir.exists():
-        tmp_dir.mkdir()
-
-    tables = setup_tables(run_vars, out_dir)
-
-    cos_1 = np.cos(np.radians(run_vars.angle1))
-    sin_1 = np.sin(np.radians(run_vars.angle1))
-    cos_2 = np.cos(np.radians(run_vars.angle2))
-    sin_2 = np.sin(np.radians(run_vars.angle2))
-    for run_num in range(run_vars.run_i, n_runs + 1):
-        run_dir: Path = out_dir / f"run_{run_num}"
-        if not run_dir.exists():
-            run_dir.mkdir()
-
-        def rnd_coord(offset: float) -> float:
-            return offset + (np.random.rand() * 2 - 1) * run_vars.lattice * C60_WIDTH
-
-        def check_run_vars_field(field_name: str) -> bool:
-            return (not hasattr(run_vars, field_name)) or run_num != run_vars.run_i
-
-        run_vars.dump_during = run_dir / "dump.during"
-        run_vars.dump_initial = run_dir / "dump.initial"
-        run_vars.dump_final = run_dir / "dump.final"
-        run_vars.cluster_xyz_file = run_dir / "cluster_xyz.txt"
-        run_vars.output_file = tmp_dir / "tmp.input.data"
-
-        if check_run_vars_field("cluster_position"):
-            # run_vars.cluster_position.x = rnd_coord(run_vars.cluster_position.x)
-            # run_vars.cluster_position.y = rnd_coord(run_vars.cluster_position.y)
-            run_vars.cluster_position = Vector3D(
-                x=run_vars.cluster_offset.x,
-                y=run_vars.cluster_offset.y,
-                z=run_vars.cluster_offset.z,
-            )
-            run_vars.cluster_position.x += run_vars.cluster_position.z * sin_1 * cos_2
-            run_vars.cluster_position.y += run_vars.cluster_position.z * sin_1 * sin_2
-            run_vars.cluster_position.z *= cos_1
-            run_vars.cluster_position.z += run_vars.zero_lvl
-
-        if check_run_vars_field("cluster_velocity"):
-            run_vars.cluster_velocity = Vector3D()
-            vel = (
-                -np.sqrt(run_vars.energy * 1000 / CLUSTER_AMASS / CLUSTER_COUNT)
-                * 138.842
-            )
-            run_vars.cluster_velocity.z = vel * cos_1
-            run_vars.cluster_velocity.x = vel * sin_1 * cos_2
-            run_vars.cluster_velocity.y = vel * sin_1 * sin_2
-
-        if check_run_vars_field("crystal_offset"):
-            run_vars.crystal_offset = Vector3D()
-            run_vars.crystal_offset.x = rnd_coord(run_vars.crystal_offset.x)
-            run_vars.crystal_offset.y = rnd_coord(run_vars.crystal_offset.y)
-
-        backup_input_file: Path = run_dir / "input.data"
-        if run_vars.input_file != backup_input_file:
-            shutil.copy(run_vars.input_file, backup_input_file)
-        run_vars.input_file = backup_input_file
-
-        run_vars = RunVars.model_validate(run_vars)
-        with open(run_dir / "vars.json", mode="w") as f:
-            json.dump(json.loads(run_vars.model_dump_json()), f, indent=2)
-
-        lmp.command(f"log {run_dir / "log.lammps"}")
-        lmp.command("clear")
-        lmp.commands_list(accelerator_cmds)
-        set_lmp_run_vars(lmp, run_vars)
-        lmp.file("in.fall")
-
-        plot_cluser_xyz(run_vars.cluster_xyz_file)
-
-        if IS_MULTIFALL:
-            write_file_no_clusters = tmp_dir / "tmp_no_cluster.input.data"
-            subprocess.run(
-                [
-                    shutil.which("remove-sputtered"),
-                    run_vars.output_file,
-                    run_vars.dump_final,
-                    write_file_no_clusters,
-                ],
-                check=True,
-            )
-            run_vars.input_file = write_file_no_clusters
-
-    # TODO run rust analyzers
-    # lammps_util.clusters_parse(tables.clusters, n_runs)
-    # lammps_util.clusters_parse_sum(tables.clusters, n_runs)
-    # lammps_util.clusters_parse_angle_dist(tables.clusters, n_runs)
-    # lammps_util.carbon_dist_parse(tables.carbon_dist)
-
-
 if __name__ == "__main__":
-    lammps_mpi4py.run(main)
+    cli()
