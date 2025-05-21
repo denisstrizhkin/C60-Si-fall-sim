@@ -12,11 +12,26 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "black>=25.1.0",
     "mypy>=1.15.0",
     "python-lsp-server[all]>=1.12.2",
     "ruff>=0.11.10",
 ]
 
-[tool.black]
+[tool.ruff]
 line-length = 79
+
+[tool.ruff.lint]
+select = [
+    # pycodestyle
+    "E",
+    # Pyflakes
+    "F",
+    # pyupgrade
+    "UP",
+    # flake8-bugbear
+    "B",
+    # flake8-simplify
+    "SIM",
+    # isort
+    "I",
+]

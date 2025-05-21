@@ -1,22 +1,19 @@
 #!/usr/bin/env python
 
-from typing import Optional, Annotated, TypeVar, Type
-from pathlib import Path
 import json
 import shutil
 import subprocess
-
-import matplotlib.pyplot as plt
-import numpy as np
-from pydantic import BaseModel, Field, ConfigDict
-import typer
+from pathlib import Path
+from typing import Annotated, TypeVar
 
 import lammps_mpi4py
-
+import matplotlib.pyplot as plt
+import numpy as np
+import typer
+from pydantic import BaseModel, ConfigDict, Field
 
 SI_ATOM_TYPE: int = 1
 C_ATOM_TYPE: int = 2
-IS_MULTIFALL: bool = False
 
 C60_WIDTH: int = 20
 CLUSTER_AMASS: float = 12.011
@@ -54,17 +51,17 @@ class RunVars(BaseModel):
     dump_initial: Path
     dump_final: Path
     dump_during: Path
-    energy_file: Optional[Path] = None
+    energy_file: Path | None = None
     cluster_xyz_file: Path
 
     cluster_file: Path
     elstop_table: Path
-    graphene_data: Optional[str] = None
+    graphene_data: str | None = None
 
 
 class State(BaseModel):
     run_vars: RunVars
-    is_mutifall: bool
+    is_multifall: bool
 
 
 T = TypeVar("T", bound=BaseModel)
@@ -75,8 +72,8 @@ def save_model(model: T, path: Path):
         json.dump(json.loads(model.model_dump_json()), f, indent=2)
 
 
-def load_model(path: Path, model_class: Type[T]) -> T:
-    with open(path, mode="r") as f:
+def load_model(path: Path, model_class: type[T]) -> T:
+    with open(path) as f:
         return model_class.model_construct(json.load(f))
 
 
@@ -85,81 +82,72 @@ cli = typer.Typer()
 
 @cli.command()
 def rerun(
-    results_dir: Path,
-    runs=Annotated[
-        int, typer.Option(default=1, help="Number of simulations to run.")
-    ],
-    is_multifall=Annotated[
+    results_dir: Annotated[Path, typer.Option()],
+    runs: Annotated[
+        int, typer.Option(help="Number of simulations to run.")
+    ] = 1,
+    is_multifall: Annotated[
         bool,
-        typer.Option(
-            default=False,
-        ),
-    ],
-    n_run: Optional[int] = None,
-    omp_threads=Annotated[
+        typer.Option(),
+    ] = False,
+    n_run: Annotated[int | None, typer.Option()] = None,
+    omp_threads: Annotated[
         int,
         typer.Option(
-            default=2,
             help="Set number of OpenMP threads. (if set to 0 use GPU)",
         ),
-    ],
+    ] = 2,
 ):
     state = load_model(results_dir / "state.json", State)
     app = App(
-        results_dir, state.run_vars, runs, state.is_mutifall, omp_threads
+        results_dir=results_dir,
+        run_vars=state.run_vars,
+        n_runs=runs,
+        is_multifall=state.is_multifall,
+        omp_threads=omp_threads,
     )
     lammps_mpi4py.run(app)
 
 
 @cli.command()
 def run(
-    temperature=Annotated[
-        float,
-        typer.Option(
-            default=1e6, help="Set temperature of the simulation. (K)"
-        ),
-    ],
-    energy=Annotated[
-        float,
-        typer.Option(
-            default=8, help="Set fall energy of the simulation. (keV)"
-        ),
-    ],
-    angle1=Annotated[float, typer.Option(default=0.0, help="Vector angle 1")],
-    angle2=Annotated[float, typer.Option(default=0.0, help="Vector angle 2")],
-    runs=Annotated[
-        int, typer.Option(default=1, help="Number of simulations to run.")
-    ],
-    is_multifall=Annotated[
-        bool,
-        typer.Option(
-            default=False,
-        ),
-    ],
-    run_time=Annotated[
-        int,
-        typer.Option(
-            default=1000, help="Run simulation this amount of steps."
-        ),
-    ],
-    omp_threads=Annotated[
-        int,
-        typer.Option(
-            default=2,
-            help="Set number of OpenMP threads. (if set to 0 use GPU)",
-        ),
-    ],
-    results_dir=Annotated[
+    results_dir: Annotated[
         Path,
         typer.Option(
             help="Set directory path where to store computational results."
         ),
     ],
-    input_file=Annotated[Path, typer.Option(help="Set input file.")],
-    cluster_file=Annotated[Path, typer.Option(help="Set cluster file.")],
-    elstop_table=Annotated[
+    input_file: Annotated[Path, typer.Option(help="Set input file.")],
+    cluster_file: Annotated[Path, typer.Option(help="Set cluster file.")],
+    elstop_table: Annotated[
         Path, typer.Option(help="Set electron stopping table file.")
     ],
+    temperature: Annotated[
+        float, typer.Option(help="Set temperature of the simulation. (K)")
+    ] = 1e-6,
+    energy: Annotated[
+        float,
+        typer.Option(help="Set fall energy of the simulation. (keV)"),
+    ] = 8.0,
+    angle1: Annotated[float, typer.Option(help="Vector angle 1")] = 0.0,
+    angle2: Annotated[float, typer.Option(help="Vector angle 2")] = 0.0,
+    runs: Annotated[
+        int, typer.Option(help="Number of simulations to run.")
+    ] = 1,
+    is_multifall: Annotated[
+        bool,
+        typer.Option(),
+    ] = False,
+    run_time: Annotated[
+        int,
+        typer.Option(help="Run simulation this amount of steps."),
+    ] = 1000,
+    omp_threads: Annotated[
+        int,
+        typer.Option(
+            help="Set number of OpenMP threads. (if set to 0 use GPU)",
+        ),
+    ] = 2,
 ):
     run_vars = RunVars.model_construct(
         zero_lvl=82.7813,
@@ -173,7 +161,14 @@ def run(
         run_time=run_time,
     )
 
-    app = App(results_dir, run_vars, runs, is_multifall, omp_threads)
+    print(type(results_dir))
+    app = App(
+        results_dir=results_dir,
+        run_vars=run_vars,
+        n_runs=runs,
+        is_multifall=is_multifall,
+        omp_threads=omp_threads,
+    )
     lammps_mpi4py.run(app)
 
 
@@ -183,6 +178,7 @@ def get_accelerator_cmds(omp_threads: int) -> list[str]:
         accelerator_cmds += [f"package omp {omp_threads}", "suffix omp"]
     else:
         accelerator_cmds += ["package gpu 0 neigh no", "suffix gpu"]
+    return accelerator_cmds
 
 
 class App:
@@ -215,13 +211,13 @@ class App:
             )
             save_model(state, self._out_dir / "state.json")
 
-    def _run(self, lmp: lammps_mpi4py.LammpsMPI, run_num: int):
+    def _run(self, lmp: lammps_mpi4py.LammpsMPI):
         cos_1 = np.cos(np.radians(self._run_vars.angle1))
         sin_1 = np.sin(np.radians(self._run_vars.angle1))
         cos_2 = np.cos(np.radians(self._run_vars.angle2))
         sin_2 = np.sin(np.radians(self._run_vars.angle2))
 
-        run_dir: Path = self._out_dir / f"run_{run_num}"
+        run_dir: Path = self._out_dir / f"run_{self._run_vars.run_i}"
         if not run_dir.exists():
             run_dir.mkdir()
 
@@ -291,14 +287,14 @@ class App:
         run_vars = RunVars.model_validate(self._run_vars)
         save_model(run_vars, run_dir / "vars.json")
 
-        lmp.command(f"log {run_dir / "log.lammps"}")
+        lmp.command(f"log {run_dir / 'log.lammps'}")
         lmp.command("clear")
         lmp.commands_list(self._accelerator_cmds)
         set_lmp_run_vars(lmp, run_vars)
         lmp.file("in.fall")
         plot_cluser_xyz(self._run_vars.cluster_xyz_file)
 
-        if IS_MULTIFALL:
+        if self._is_mutifall:
             write_file_no_clusters = (
                 self._tmp_dir / "tmp_no_cluster.input.data"
             )
@@ -329,9 +325,9 @@ def plot_cluser_xyz(path: Path):
 
 def set_lmp_run_vars(lmp: lammps_mpi4py.LammpsMPI, run_vars: RunVars):
     vars = run_vars.model_dump()
-    for key in vars.keys():
+    for key in vars:
         value = getattr(run_vars, key)
-        if isinstance(value, int) or isinstance(value, int):
+        if isinstance(value, int | float):
             lmp.command(f"variable {key} equal {value}")
         elif isinstance(value, Vector3D):
             for i in "xyz":
