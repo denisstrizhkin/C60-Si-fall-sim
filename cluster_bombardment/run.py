@@ -161,7 +161,6 @@ def run(
         run_time=run_time,
     )
 
-    print(type(results_dir))
     app = App(
         results_dir=results_dir,
         run_vars=run_vars,
@@ -230,7 +229,7 @@ class App:
             )
 
         def check_run_vars_field(field_name: str) -> bool:
-            return not hasattr(run_vars, field_name)
+            return not hasattr(self._run_vars, field_name)
 
         self._run_vars.dump_during = run_dir / "dump.during"
         self._run_vars.dump_initial = run_dir / "dump.initial"
