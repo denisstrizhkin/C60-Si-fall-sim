@@ -104,6 +104,7 @@ def rerun(
         run_vars=state.run_vars,
         n_runs=runs,
         is_multifall=state.is_multifall,
+        is_restart=True,
         omp_threads=omp_threads,
     )
     lammps_mpi4py.run(app)
@@ -166,6 +167,7 @@ def run(
         run_vars=run_vars,
         n_runs=runs,
         is_multifall=is_multifall,
+        is_restart=False,
         omp_threads=omp_threads,
     )
     lammps_mpi4py.run(app)
@@ -187,6 +189,7 @@ class App:
         run_vars: RunVars,
         n_runs: int,
         is_multifall: bool,
+        is_restart: bool,
         omp_threads: int,
     ):
         self._out_dir = results_dir
@@ -198,13 +201,14 @@ class App:
         self._run_vars = run_vars
         self._n_runs = n_runs
         self._is_mutifall = is_multifall
+        self._is_restart = is_restart
         self._accelerator_cmds = get_accelerator_cmds(omp_threads)
 
     def __call__(self, lmp: lammps_mpi4py.LammpsMPI):
         while self._run_vars.run_i < self._n_runs + 1:
             self._run(lmp)
             self._run_vars.run_i += 1
-
+            self._is_restart = False
             state = State(
                 run_vars=self._run_vars, is_multifall=self._is_mutifall
             )
@@ -229,7 +233,9 @@ class App:
             )
 
         def check_run_vars_field(field_name: str) -> bool:
-            return not hasattr(self._run_vars, field_name)
+            return (not hasattr(self._run_vars, field_name)) or (
+                not self._is_restart
+            )
 
         self._run_vars.dump_during = run_dir / "dump.during"
         self._run_vars.dump_initial = run_dir / "dump.initial"
