@@ -74,7 +74,7 @@ def save_model(model: T, path: Path):
 
 def load_model(path: Path, model_class: type[T]) -> T:
     with open(path) as f:
-        return model_class.model_construct(json.load(f))
+        return model_class.model_validate(json.load(f))
 
 
 cli = typer.Typer()
