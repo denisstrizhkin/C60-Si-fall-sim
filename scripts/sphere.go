@@ -31,8 +31,12 @@ func readAllLines(path string, max_timestep int) (lines []string, timesteps []in
 	lines = make([]string, 0)
 	timesteps = make([]int, 0)
 	for i := 0; scanner.Scan(); i++ {
-		lines = append(lines, scanner.Text())
 		if scanner.Text() == "ITEM: TIMESTEP" {
+			if len(lines) > 0 {
+				// start job
+				lines = nil
+			}
+			lines = append(lines, scanner.Text())
 			if !scanner.Scan() {
 				break
 			}
@@ -44,6 +48,7 @@ func readAllLines(path string, max_timestep int) (lines []string, timesteps []in
 			}
 			i++
 		}
+		lines = append(lines, scanner.Text())
 	}
 	if err := scanner.Err(); err != nil {
 		log.Fatalf("reading dump file: %s - %v", path, err)
