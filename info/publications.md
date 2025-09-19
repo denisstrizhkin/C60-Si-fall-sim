@@ -57,7 +57,7 @@
 9. **K. Karasev, D. Strizhkin and P. Karaseov**,
   "The Way to Analyse MD Simulation Results of Cluster Ion Bombardment,"
   2023 International Conference on Electrical Engineering and Photonics (EExPolytech), 2023, p.282
-  [Link](https://ieeexplore.ieee.org/document/9950888)
+  [Link](https://ieeexplore.ieee.org/document/10318713)
 11. **К.П. Карасев, Д.А. Стрижкин, П.А. Карасев, А.И. Титов**,
   “Размерные эффекты при молекулярно-динамическом моделировании падения иона фуллерена на поверхность кремния”,
   Научно-технические ведомости СПбГПУ: Физико-математические науки, 2023, Т. 16, №4, c.76
