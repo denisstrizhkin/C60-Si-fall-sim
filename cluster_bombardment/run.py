@@ -12,6 +12,9 @@ import numpy as np
 import typer
 from pydantic import BaseModel, ConfigDict, Field
 
+PY_FILE = Path(__file__)
+IN_FILE = PY_FILE.parent / "in.fall"
+
 SI_ATOM_TYPE: int = 1
 C_ATOM_TYPE: int = 2
 
@@ -195,6 +198,8 @@ class App:
         self._out_dir = results_dir
         if not self._out_dir.exists():
             self._out_dir.mkdir()
+        shutil.copyfile(PY_FILE, self._out_dir / PY_FILE.name)
+        shutil.copyfile(IN_FILE, self._out_dir / IN_FILE.name)
         self._tmp_dir = self._out_dir / "tmp"
         if not self._tmp_dir.exists():
             self._tmp_dir.mkdir()
@@ -296,7 +301,7 @@ class App:
         lmp.command("clear")
         lmp.commands_list(self._accelerator_cmds)
         set_lmp_run_vars(lmp, run_vars)
-        lmp.file("in.fall")
+        lmp.file(str(IN_FILE))
         plot_cluser_xyz(self._run_vars.cluster_xyz_file)
 
         if self._is_mutifall:
