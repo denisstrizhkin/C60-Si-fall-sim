@@ -10,6 +10,14 @@
   “Динамика начальной стадии образования углеродных покрытий при облучении кремния ионами С60”,
   Взаимодействие ионов с поверхностью "ВИП-2025" Труды XXVII Международной конференции, 2025., c. 36
   [Link](http://isi2025.yarsu.ru/rus/first_rus.html)
+3. **K. Karasev, D. Strizhkin and P. Karaseov**,
+   "Brief Guide into Surface Composition Analysis Methods in MD Simulations",
+   2025 International Conference on Electrical Engineering and Photonics (EExPolytech), 2025, pp. 300-302
+   [Link](https://ieeexplore.ieee.org/document/11252298)
+4. **A. Kondrateva et al.**,
+   "Smart Nose System Based on Single MEMS NiO Gas Sensor",
+   2025 International Conference on Electrical Engineering and Photonics (EExPolytech), 2025, pp. 375-377
+   [Link](https://ieeexplore.ieee.org/document/11251860)
 
 ## 2024
 
