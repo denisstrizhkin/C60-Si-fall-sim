@@ -1,5 +1,12 @@
 # List of publications by years:
 
+## 2026
+
+1. **P.A. Karaseov, K.P. Karasev, D.A. Strizhkin, E.D. Fedorenko, V.E. Pukha, A.E. Ieshkin, D.S. Kireev**,
+  Enhanced target erosion at the shadow mask edge by cluster ion bombardment,
+  Applied Surface Science, vol. 720, Part B, 2026, p. 165220
+  [Link](https://doi.org/10.1016/j.apsusc.2025.165220)
+
 ## 2025
 
 1. **Д.А. Стрижкин, К.П. Карасев, П.А. Карасев, А.И. Титов, А.Л. Шахмин, Е.Д. Федоренко**,
