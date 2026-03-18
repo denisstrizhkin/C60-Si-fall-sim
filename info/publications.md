@@ -10,11 +10,19 @@
   “Динамика начальной стадии образования углеродных покрытий при облучении кремния ионами С60”,
   Взаимодействие ионов с поверхностью "ВИП-2025" Труды XXVII Международной конференции, 2025., c. 36
   [Link](http://isi2025.yarsu.ru/rus/first_rus.html)
-3. **K. Karasev, D. Strizhkin and P. Karaseov**,
+3. **Пуха В.Е., Кабачков Е.Н., Бельмесов А.А., Карасев К.П., Стрижкин Д.А., Карасев П.А.**,
+   "Формирование функциональных углеродных пленок при облучении Ti мишени ионами C60",
+   Взаимодействие ионов с поверхностью "ВИП-2025" Труды XXVII Международной конференции, 2025., c. 288
+   [Link](https://elibrary.ru/download/elibrary_82978226_73399026.pdf)
+5. **Д.А. Стрижкин, К.П. Карасев, П.А. Карасев**,
+   "Возможности молекулярно-динамического моделирования для анализа облучения кластерными ионами",
+   Неделя науки ИЭиТ. материалы Всероссийской конференции, 2025, c. 12
+   [Link](https://elibrary.ru/item.asp?id=88832459)
+6. **K. Karasev, D. Strizhkin and P. Karaseov**,
    "Brief Guide into Surface Composition Analysis Methods in MD Simulations",
    2025 International Conference on Electrical Engineering and Photonics (EExPolytech), 2025, pp. 300-302
    [Link](https://ieeexplore.ieee.org/document/11252298)
-4. **A. Kondrateva et al.**,
+7. **A. Kondrateva et al.**,
    "Smart Nose System Based on Single MEMS NiO Gas Sensor",
    2025 International Conference on Electrical Engineering and Photonics (EExPolytech), 2025, pp. 375-377
    [Link](https://ieeexplore.ieee.org/document/11251860)
